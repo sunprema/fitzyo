@@ -12,13 +12,24 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className={`flex min-h-screen flex-col ${inter.className}`}>
-        <div className='bg-white  shrink w-full p-4 flex justify-between items-center ' >
-          <Link href="/" className='text-xl font-bold tracking-wide font-sans subpixel-antialiased hover:font-extrabold'> Fitzyo</Link>
-          <Link href="/aboutUs"> About us</Link>
-        </div>
-        {children}
+      <body className={`${inter.className}`}>
         
+        {/* Header */}
+        <header className='relative top-0 left-0 right-0 z-10 shadow-md'>
+          <nav className=" py-6 flex justify-between items-center container mx-auto" >
+            <Link href="/" className='text-xl font-bold tracking-wide font-sans subpixel-antialiased hover:font-extrabold'> <span className={'text-2xl'}>&#129434;</span> Fitzyo</Link>
+            <div className={'flex justify-between space-x-20'} >
+              <Link className='py-1 hover:text-green-400' href="/aboutUs" > About us</Link>
+              <Link href='/signIn'>
+              <div className='bg-green-600 shadow-md py-1 px-2 rounded-sm text-sm text-white font-sans font-semibold hover:bg-green-400'>
+                Sign In
+              </div>
+              </Link>
+            </div>  
+          </nav>          
+        </header>
+        {children}
+       
       </body>
     </html>
   )
