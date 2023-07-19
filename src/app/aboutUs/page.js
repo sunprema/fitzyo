@@ -53,7 +53,7 @@ const AboutUs = () => {
         <svg className="w-8 h-8 text-gray-400 dark:text-gray-600 mb-4" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 18 14">
             <path d="M6 0H2a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h4v1a3 3 0 0 1-3 3H2a1 1 0 0 0 0 2h1a5.006 5.006 0 0 0 5-5V2a2 2 0 0 0-2-2Zm10 0h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h4v1a3 3 0 0 1-3 3h-1a1 1 0 0 0 0 2h1a5.006 5.006 0 0 0 5-5V2a2 2 0 0 0-2-2Z"/>
         </svg>
-    <i>In a report focused on the losses due to returns, IHL Group estimated that worldwide, retailers lose more than $600 billion each year to sales returns. Labeled the "ghost economy" by IHL, retailers in North America accounted for $183 billion of that number alone. 
+    <i>In a report focused on the losses due to returns, IHL Group estimated that worldwide, retailers lose more than $600 billion each year to sales returns. Labeled the &quot;ghost economy&quot; by IHL, retailers in North America accounted for $183 billion of that number alone. 
     Why the high rate of return? Well, according to the study,<span className={'bg-yellow-200'}>wrong size was the number one reason.</span> 
     </i>
     <a className={'mx-2 p-2 bg-green-100 rounded-sm text-sm'}
@@ -91,7 +91,7 @@ const AboutUs = () => {
     </h1> 
     <h1 className={'font-semibold text-lg mx-auto mb-12 pb-12 px-2'} >
       
-      With Fitzyo's "Retail Passport" and the "AI Stylers", users can say goodbye to the guesswork and frequent returns while saving Environment and Retailers!.
+      With Fitzyo&apos;s &quot;Retail Passport&quot; and the &quot;AI Stylers&quot;, users can say goodbye to the guesswork and frequent returns while saving Environment and Retailers!.
     </h1>
     </div>
     </div>

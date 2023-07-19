@@ -33,7 +33,7 @@ const StylersSection =() => {
         Peacock
     </div> 
     <div className={'bg-white pb-12'}>      
-        <p className='p-6 font-mono text-sm text-slate-800'>I'm trained in Ethnic wears!</p>
+        <p className='p-6 font-mono text-sm text-slate-800'>I&apos;m trained in Ethnic wears!</p>
         <p className='px-6 font-mono text-xs text-slate-800'>If you are looking to buy Ethnic wears and accessories, talk to me!</p>
     </div> 
      
@@ -49,7 +49,7 @@ const StylersSection =() => {
         Leopard
     </div> 
     <div className={'bg-white pb-12'}>      
-        <p className='p-6 font-mono text-sm text-slate-800'>I'm trained in Sports wears!.</p>
+        <p className='p-6 font-mono text-sm text-slate-800'>I&lsquo;m trained in Sports wears!.</p>
         <p className='px-6 font-mono text-xs text-slate-800'>If you are looking to buy athletic wears, shoes, jackets, talk to me!</p>
     </div>
     </div>
@@ -64,7 +64,7 @@ const StylersSection =() => {
         Lion
     </div> 
     <div className={'bg-white pb-12'}>      
-        <p className='p-6 font-mono text-sm text-slate-800'>I'm the king!</p>
+        <p className='p-6 font-mono text-sm text-slate-800'>I&apos;m the king!</p>
         <p className='px-6 font-mono text-xs text-slate-800'>Come to me for all other items. I work with all the Stylers. talk to me!</p>
     </div>
     </div>
@@ -142,7 +142,7 @@ export default function Home() {
             
             <h3 className={'mb-3 text-lg font-medium text-slate-800'}> Hi There!</h3>
             <h3 className={'mb-2 font-medium text-base text-slate-600'}>We are AI models trained with fashion data from our retail partners. You can train us too by ❤️ items.</h3>          
-            <h3 className={'font-medium text-base text-slate-600'}>With your Retail Passport, We can assist you in finding right stuff that "fitz you" ...Fitzyo!  </h3>            
+            <h3 className={'font-medium text-base text-slate-600'}>With your Retail Passport, We can assist you in finding right stuff that &ldquo;fitz you&rdquo; ...Fitzyo!  </h3>            
                         
           </div>
 
