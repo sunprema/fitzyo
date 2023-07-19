@@ -17,7 +17,7 @@ const StylersSection =() => {
         Zebra
     </div> 
     <div className={'bg-white pb-12'}>      
-        <p className='p-6 font-mono text-sm text-slate-800'>I'm trained in Formals!</p>
+        <p className='p-6 font-mono text-sm text-slate-800'>I&apos;m trained in Formals!</p>
         <p className='px-6 font-mono text-xs text-slate-800'>If you are looking for formal wears, shoes, belts and suits, talk to me!</p>
     </div> 
      
@@ -102,8 +102,12 @@ export default function Home() {
           <div className={'bg-neutral-50 px-6 py-20 text-center text-neutral-800'}>
             <h1 className={'mb-6 text-5xl font-bold'}> Measure once, buy anywhere.</h1>
             <h3 className={'mb-4 font-medium'}>Fitzyo is your fashion assistant, <span className={'bg-yellow-200'}> perfected!</span>.</h3>            
-            <p className={'my-16 text-center mx-auto w-8/12 font-medium text-green-600'}>              
-              <span>Join Fitzyo,</span>
+            <p className={'my-8 text-center mx-auto w-8/12 font-medium text-green-600'}>
+            <span className={'mb-4'}>Fitzyo helps in finding stuff that just fits you, using your Retail passport issued at our partners location.</span>
+            </p>
+            <p className={'mb-4 text-center mx-auto w-8/12 font-medium text-green-600'}>              
+              
+              <span>Sign up!,</span>
               <span className='font-semibold'> Get your Retail Passport,</span>
               <span> Shop with our AI Stylers.</span>
             </p>
@@ -111,11 +115,23 @@ export default function Home() {
   </section>
 
   {/* Retail passport */}  
-  <section className='my-12 container mx-auto bg-green-100'>
+  <section className='my-6 container mx-auto bg-green-100'>
           <div className={'px-6 py-20 r text-neutral-800'}>
             <h1 className={'mb-6 text-2xl font-bold'}>What is Retail Passport?</h1>
-            <h3 className={'mb-4 font-medium'}>Fitzyo is your online shopping assistant, <span className={'bg-yellow-200'}> perfected!</span>.</h3>            
-            
+            <h3 className={'mb-4 font-medium'}> 
+            Retail Passport is an online card that will hold your measurements securely. 
+            You need to schedule a visit to one of our authorized partners location and a professional will take the measurement.
+            You can get it for everyone in the family. You can attach retail passports to your profile.
+            </h3>
+
+            <p className={'mt-4 font-medium'}>
+            When you want to shop in Fitzyo, you will select a Retail passport, magically, everything you browse in our site will fit your size.
+            This can be used at our partners websites too after you authorize them to use the passport for the logged in session.
+            </p>
+
+            <p className={'mt-4 font-medium'}>
+            See the <Link className={' bg-yellow-100'} href={"/aboutUs"}> About us</Link> for why this is important.
+            </p>
           </div>
   </section>
 

@@ -38,7 +38,7 @@ const AboutUs = () => {
     <div className='mt-20 text-2xl font-bold bg-slate-100 py-6 px-2'>
     <h1>Mission</h1>
     <blockquote className={'text-xl italic font-semibold text-gray-900 dark:text-white from-neutral-300 p-12'} >
-    Fitzyo's mission is to ensure the perfect fit for every customer, every time, eliminating the need for returns. By integrating advanced AI technology with personalized measurements, we aim to provide seamless, tailored shopping experiences, transforming the way you find your perfect fashion match.
+    Fitzyo&apos;s mission is to ensure the perfect fit for every customer, every time, eliminating the need for returns. By integrating advanced AI technology with personalized measurements, we aim to provide seamless, tailored shopping experiences, transforming the way you find your perfect fashion match.
     </blockquote>
     </div>
 
@@ -50,7 +50,7 @@ const AboutUs = () => {
     
     <blockquote cite="https://www.liveabout.com/the-high-cost-of-retail-returns-2890350" 
     className={'text-xl italic font-semibold text-gray-900 dark:text-white from-neutral-300 p-12'}>
-        <svg class="w-8 h-8 text-gray-400 dark:text-gray-600 mb-4" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 18 14">
+        <svg className="w-8 h-8 text-gray-400 dark:text-gray-600 mb-4" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 18 14">
             <path d="M6 0H2a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h4v1a3 3 0 0 1-3 3H2a1 1 0 0 0 0 2h1a5.006 5.006 0 0 0 5-5V2a2 2 0 0 0-2-2Zm10 0h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h4v1a3 3 0 0 1-3 3h-1a1 1 0 0 0 0 2h1a5.006 5.006 0 0 0 5-5V2a2 2 0 0 0-2-2Z"/>
         </svg>
     <i>In a report focused on the losses due to returns, IHL Group estimated that worldwide, retailers lose more than $600 billion each year to sales returns. Labeled the "ghost economy" by IHL, retailers in North America accounted for $183 billion of that number alone. 
@@ -63,7 +63,7 @@ const AboutUs = () => {
 
     <blockquote cite="https://www.theatlantic.com/magazine/archive/2021/11/free-returns-online-shopping/620169/" 
     className={'text-xl italic font-semibold text-gray-900 dark:text-white from-neutral-300 p-12'}>
-        <svg class="w-8 h-8 text-gray-400 dark:text-gray-600 mb-4" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 18 14">
+        <svg className="w-8 h-8 text-gray-400 dark:text-gray-600 mb-4" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 18 14">
             <path d="M6 0H2a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h4v1a3 3 0 0 1-3 3H2a1 1 0 0 0 0 2h1a5.006 5.006 0 0 0 5-5V2a2 2 0 0 0-2-2Zm10 0h-4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h4v1a3 3 0 0 1-3 3h-1a1 1 0 0 0 0 2h1a5.006 5.006 0 0 0 5-5V2a2 2 0 0 0-2-2Z"/>
         </svg>
     <i>Even some of the biggest retailers in the world now see rampant returns as an existential threat.</i>
