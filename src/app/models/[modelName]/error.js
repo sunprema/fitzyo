@@ -2,7 +2,7 @@
 
 import {useEffect} from 'react'
 
-const errorHandler = ({error, reset}) => {
+const ErrorHandler = ({error, reset}) => {
     useEffect( () => {
         console.error(error)
     },[error])
@@ -24,4 +24,4 @@ const errorHandler = ({error, reset}) => {
     )
 }
 
-export default errorHandler ;
+export default ErrorHandler ;
