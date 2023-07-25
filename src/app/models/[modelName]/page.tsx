@@ -24,7 +24,7 @@ interface SuggestionRequest {
 
 const fetcher = async (suggestionRequestData:SuggestionRequest) => {
     console.log( suggestionRequestData)
-    let response = await axios.post('/api/models/suggestions', suggestionRequestData )
+    let response = await axios.post('/api/models/suggestions', suggestionRequestData , {'timeout' : 15000})
     return response.data    
     
 }
@@ -46,7 +46,7 @@ const SearchSuggestionUI = ({suggestionRequest}) => {
     if (error) return <h1> {` Error : ${error}`}</h1>
     if(data){
         return (
-            
+
             <p><pre>{ JSON.stringify(data, null, 2) }</pre></p>
         )
     }
