@@ -22,7 +22,12 @@ const modelPrompts = {
 
 const getSuggestionsFromChatGpt = async ( modelName:string, searchText:string ) => {
     const openAIPrompt = `system:You are a fashion designer specialized in ${ modelPrompts[modelName]}. Your task is to find garments for the user query following, user:${searchText}`
+    console.log(`THE PROMPT IS : ${openAIPrompt}` );
+    const start = Date.now();
     const response = await translator.translate(searchText);
+    const end = Date.now();
+    console.log(`Execution time: ${end - start} ms`);
+
     console.log(response);
     if (!response.success) {
         
