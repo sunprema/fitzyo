@@ -29,7 +29,7 @@ const getSuggestionsFromChatGpt = async ( modelName:string, searchText:string ) 
         return "Couldnt get a proper response";
     }
     
-   console.log(response.data)
+   console.log(JSON.stringify(response.data))
    return response.data
 }
 

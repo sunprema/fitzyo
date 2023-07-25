@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useState, useRef } from 'react'
 import axios from 'axios'
 import useSWR, { SWRConfig } from 'swr'
+import { StylerSuggestion } from '../../../../schemas/stylerSchema'
 
 
 const AI_STYLERS = {'zebra' : '🦓',
@@ -14,7 +15,14 @@ const AI_STYLERS = {'zebra' : '🦓',
 
 const AI_STYLERS_UNICODE = ['zebra', 'peacock', 'lion', 'leopard']
 
-const fetcher = async (suggestionRequestData) => {
+let dd: StylerSuggestion 
+
+interface SuggestionRequest {
+    modelName : string;
+    searchText: string;
+}
+
+const fetcher = async (suggestionRequestData:SuggestionRequest) => {
     console.log( suggestionRequestData)
     let response = await axios.post('/api/models/suggestions', suggestionRequestData )
     return response.data    
@@ -22,9 +30,9 @@ const fetcher = async (suggestionRequestData) => {
 }
 
 
-const useSearchSuggestionHook = (suggestionRequest) => {
+const useSearchSuggestionHook = (suggestionRequest:SuggestionRequest) => {
     console.log(" useSearchSuggestionHook used here!")
-    const {data, error, isLoading} = useSWR( suggestionRequest, fetcher)
+    const {data, error, isLoading} = useSWR<StylerSuggestion,Error>( suggestionRequest, fetcher);
     return{
         data,
         error,
@@ -36,7 +44,13 @@ const SearchSuggestionUI = ({suggestionRequest}) => {
     const { data, error, isLoading} = useSearchSuggestionHook( suggestionRequest)
     if (isLoading) return <h1>Loading...</h1>
     if (error) return <h1> {` Error : ${error}`}</h1>
-    return <p>{ JSON.stringify(data) }</p>
+    if(data){
+        return (
+            
+            <p><pre>{ JSON.stringify(data, null, 2) }</pre></p>
+        )
+    }
+    
 
 }
 
