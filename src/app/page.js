@@ -5,68 +5,75 @@ import Link from 'next/link';
 
 const StylersSection =() => {
   return(
+    
   <div className={'grid grid-cols-1 sm:grid-cols-4 gap-4 p-6 justify-items-center' }>
-
+    
     {/* First card - Zebra */}
-    <div className={'flex flex-col justify-center shadow-lg max-w-sm hover:shadow-2xl hover:cursor-pointer'}>
-    <div className={'bg-red-100  text-center text-9xl p-4'}>      
-        &#129427;
-    </div> 
+    <div className={'flex flex-col justify-center shadow-lg max-w-sm hover:shadow-2xl hover:cursor-pointer transition-all hover:scale-105'}>
+    <Link href="/models/zebra">  
+      <div className={'bg-red-100  text-center text-9xl p-4'}>      
+          &#129427;
+      </div> 
 
-    <div className={'bg-red-100 pb-4 pl-4 font-semibold'}>      
-        Zebra
-    </div> 
-    <div className={'bg-white pb-12'}>      
-        <p className='p-6 font-mono text-sm text-slate-800'>I&apos;m trained in Formals!</p>
-        <p className='px-6 font-mono text-xs text-slate-800'>If you are looking for formal wears, shoes, belts and suits, talk to me!</p>
-    </div> 
-     
+      <div className={'bg-red-100 pb-4 pl-4 font-semibold'}>      
+          Zebra
+      </div> 
+      <div className={'bg-white pb-12'}>      
+          <p className='p-6 font-mono text-sm text-slate-800'>I&apos;m trained in Formals!</p>
+          <p className='px-6 font-mono text-xs text-slate-800'>If you are looking for formal wears, shoes, belts and suits, talk to me!</p>
+      </div> 
+     </Link>
     </div>
 
     {/* Second card - Peacock */}
-    <div className={'flex flex-col justify-center shadow-lg max-w-sm hover:shadow-2xl hover:cursor-pointer'}>
-    <div className={'bg-yellow-100  text-center text-9xl p-4'}>      
-      &#129434;
-    </div> 
+    <div className={'flex flex-col justify-center shadow-lg max-w-sm hover:shadow-2xl hover:cursor-pointer transition-all hover:scale-105'}>
+    <Link href="/models/peacock">   
+      <div className={'bg-yellow-100  text-center text-9xl p-4'}>      
+        &#129434;
+      </div> 
 
-    <div className={'bg-yellow-100 pb-4 pl-4 font-semibold'}>      
-        Peacock
-    </div> 
-    <div className={'bg-white pb-12'}>      
-        <p className='p-6 font-mono text-sm text-slate-800'>I&apos;m trained in Ethnic wears!</p>
-        <p className='px-6 font-mono text-xs text-slate-800'>If you are looking to buy Ethnic wears and accessories, talk to me!</p>
-    </div> 
-     
+      <div className={'bg-yellow-100 pb-4 pl-4 font-semibold'}>      
+          Peacock
+      </div> 
+      <div className={'bg-white pb-12'}>      
+          <p className='p-6 font-mono text-sm text-slate-800'>I&apos;m trained in Ethnic wears!</p>
+          <p className='px-6 font-mono text-xs text-slate-800'>If you are looking to buy Ethnic wears and accessories, talk to me!</p>
+      </div> 
+    </Link> 
     </div>
 
     {/* Third card - Leopard */}
-    <div className={'flex flex-col justify-center shadow-lg max-w-sm hover:shadow-2xl hover:cursor-pointer'}>
-    <div className={'bg-blue-100  text-center text-9xl p-4'}>      
-     &#128006;
-    </div> 
+    <div className={'flex flex-col justify-center shadow-lg max-w-sm hover:shadow-2xl hover:cursor-pointer transition-all hover:scale-105'}>
+    <Link href="/models/leopard">  
+      <div className={'bg-blue-100  text-center text-9xl p-4'}>      
+      &#128006;
+      </div> 
 
-    <div className={'bg-blue-100 pb-4 pl-4 font-semibold'}>      
-        Leopard
-    </div> 
-    <div className={'bg-white pb-12'}>      
-        <p className='p-6 font-mono text-sm text-slate-800'>I&lsquo;m trained in Sports wears!.</p>
-        <p className='px-6 font-mono text-xs text-slate-800'>If you are looking to buy athletic wears, shoes, jackets, talk to me!</p>
-    </div>
+      <div className={'bg-blue-100 pb-4 pl-4 font-semibold'}>      
+          Leopard
+      </div> 
+      <div className={'bg-white pb-12'}>      
+          <p className='p-6 font-mono text-sm text-slate-800'>I&lsquo;m trained in Sports wears!.</p>
+          <p className='px-6 font-mono text-xs text-slate-800'>If you are looking to buy athletic wears, shoes, jackets, talk to me!</p>
+      </div>
+    </Link>
     </div>
 
     {/* Fourth card - Lion */}
-    <div className={'flex flex-col justify-center shadow-lg max-w-sm hover:shadow-2xl hover:cursor-pointer'}>
-    <div className={'bg-green-50 text-center text-9xl p-4'}>      
-    🦁
-    </div> 
+    <div className={'flex flex-col justify-center shadow-lg max-w-sm hover:shadow-2xl hover:cursor-pointer transition-all hover:scale-105'}>
+    <Link href="/models/lion">  
+      <div className={'bg-green-50 text-center text-9xl p-4'}>      
+      🦁
+      </div> 
 
-    <div className={'bg-green-50 pb-4 pl-4 font-semibold'}>      
-        Lion
-    </div> 
-    <div className={'bg-white pb-12'}>      
-        <p className='p-6 font-mono text-sm text-slate-800'>I&apos;m the king!</p>
-        <p className='px-6 font-mono text-xs text-slate-800'>Come to me for all other items. I work with all the Stylers. talk to me!</p>
-    </div>
+      <div className={'bg-green-50 pb-4 pl-4 font-semibold'}>      
+          Lion
+      </div> 
+      <div className={'bg-white pb-12'}>      
+          <p className='p-6 font-mono text-sm text-slate-800'>I&apos;m the king!</p>
+          <p className='px-6 font-mono text-xs text-slate-800'>Come to me for all other items. I work with all the Stylers. talk to me!</p>
+      </div>
+    </Link>
     </div>
 
     
