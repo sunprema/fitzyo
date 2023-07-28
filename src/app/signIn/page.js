@@ -9,14 +9,39 @@ import {
   ThemeSupa,
 } from '@supabase/auth-ui-shared'
 
+import {useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation';
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 )
 
-const LoginUI = () => (
-  
-  <div className={'w-full'}>
+
+const SignInPage = () => {
+  const [session, setSession ] = useState(null)
+  const router = useRouter()
+
+  useEffect( () => {
+    
+    supabase.auth.getSession().then( ({data:{ session } }) => {
+      setSession( session );
+    } )
+
+    const { data: {subscription} } = supabase.auth.onAuthStateChange( (_event, session) => {
+      setSession(session);
+    })
+    
+    return () => subscription.unsubscribe();
+
+  },[])
+
+  if ( session != null ){
+    router.push('/userHome')
+  }
+  return (
+
+    <div className={'w-full'}>
 
     {/* Sign In Header */}
     <nav className={'py-6  shadow-md items-center'}>
@@ -35,29 +60,51 @@ const LoginUI = () => (
   
     {/* Auth Section */}
     <div className='container mx-auto my-10 max-w-md'>
-    <Auth
-      supabaseClient={supabase}
-      providers={[]}
-      theme = "light"
-      
-      localization={{
-          variables: {
-            sign_in: {
-              email_label: 'Email Address:',
-              password_label: 'Password:',
+
+      { session === null ? 
+        <Auth
+        supabaseClient={supabase}
+        providers={[]}
+        theme = "light"
+        
+        localization={{
+            variables: {
+              sign_in: {
+                email_label: 'Email Address:',
+                password_label: 'Password:',
+              },
             },
-          },
-        }}    
-      appearance={{ theme: ThemeSupa , 
-          style: {
-              button: { background: 'green', color: 'white' },
-              anchor: { color: 'blue' }, }
-          }
+          }}    
+        appearance={{ theme: ThemeSupa , 
+            style: {
+                button: { background: 'green', color: 'white' },
+                anchor: { color: 'blue' }, }
+            }
+        }
+        />
+       : 
+
+      <div>
+        <div>Logged in!</div>
+        <button onClick={() => supabase.auth.signOut()}>Sign out</button>
+        <p><pre>
+          { JSON.stringify( session, " ", 2) }
+
+        </pre>
+        </p>
+
+      </div>
+    
+
       }
-    />
+
     </div>  
 
-  </div>
-)
+    </div>
+  )
 
-export default LoginUI ;
+  
+}
+
+
+export default SignInPage
