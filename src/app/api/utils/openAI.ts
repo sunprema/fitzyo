@@ -7,12 +7,12 @@ import { StylerSuggestion } from "../../../../schemas/stylerSchema";
 import { createJsonTranslator, processRequests , createOpenAILanguageModel} from "typechat";
 
 //USING TYPECHAT TO DEAL WITH OPENAI
-let typeChatModel = createOpenAILanguageModel( process.env.AI_STYLER_KEY,"gpt-3.5-turbo" );
+let typeChatModel = createOpenAILanguageModel( process.env.AI_STYLER_KEY!,"gpt-3.5-turbo" );
 const schema = fs.readFileSync(path.join(process.cwd(), "/schemas/stylerSchema.ts"), "utf8");
 const translator = createJsonTranslator<StylerSuggestion>(typeChatModel, schema, "StylerSuggestion");
 
 
-const modelPrompts = {
+const modelPrompts:{ [key:string] : string} = {
     'zebra' : ' formal wears, shoes, tie, belts ',
     'peacock' : ' ethnic wears sarees, salwar, chudidhar, kimono',
     'leopard' : ' sports wears, swim suits, watches',
