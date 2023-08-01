@@ -40,7 +40,7 @@ const useSearchSuggestionHook = (suggestionRequest:SuggestionRequest) => {
     }
 }
 
-const SearchSuggestionUI = ({suggestionRequest}) => {
+const SearchSuggestionUI = ({suggestionRequest}:{suggestionRequest:SuggestionRequest}) => {
     const { data, error, isLoading} = useSearchSuggestionHook( suggestionRequest)
     if (isLoading) return <h1>Loading...</h1>
     if (error) return <h1> {` Error : ${error}`}</h1>
