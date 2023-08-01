@@ -1,13 +1,13 @@
 'use client'
 import { IconArrowLeft, IconCircleChevronRight, IconCircleArrowRightFilled } from '@tabler/icons-react'
 import Link from 'next/link'
-import { useState, useRef } from 'react'
+import React, { useState, useRef } from 'react'
 import axios from 'axios'
 import useSWR, { SWRConfig } from 'swr'
 import { StylerSuggestion } from '../../../../schemas/stylerSchema'
 
 
-const AI_STYLERS = {'zebra' : '🦓',
+const AI_STYLERS :{[key:string] : string} = {'zebra' : '🦓',
  'peacock' : '🦚' , 
  'lion': '🦁',
  'leopard': '🐆',}
@@ -40,21 +40,20 @@ const useSearchSuggestionHook = (suggestionRequest:SuggestionRequest) => {
     }
 }
 
-const SearchSuggestionUI = ({suggestionRequest}:{suggestionRequest:SuggestionRequest}) => {
+const SearchSuggestionUI = ({suggestionRequest}:{suggestionRequest:SuggestionRequest})=> {
     const { data, error, isLoading} = useSearchSuggestionHook( suggestionRequest)
-    if (isLoading) return <h1>Loading...</h1>
-    if (error) return <h1> {` Error : ${error}`}</h1>
-    if(data){
-        return (
-
-            <p><pre>{ JSON.stringify(data, null, 2) }</pre></p>
-        )
-    }
+    var returnElement = <h1>Loading...</h1>
+    if (isLoading) returnElement = <h1>Loading...</h1>
+    if (error) returnElement = <h1> {` Error : ${error}`}</h1>
+    if(data) returnElement = <p><pre>{ JSON.stringify(data, null, 2) }</pre></p>
+        
+    return returnElement
+     
     
 
 }
 
-const placeholderTexts = {
+const placeholderTexts:{[key:string]:string} = {
     'zebra' :   'Help me pack for a business event in Japan in february',
     'peacock':  'planning to attend a Indian wedding, suggest me what should I wear',
     'leopard':  'Going for a scuba diving in Andaman, help me pack',
@@ -62,11 +61,11 @@ const placeholderTexts = {
 
 }
 
-const AIStylerUI = ({modelName}) => {
+const AIStylerUI = ({modelName}:{modelName:string}) => {
     
     const [searchText, setSearchText] = useState(placeholderTexts[modelName]); //TODO: remove the hardcoded searchText
-    const [suggestionRequest, setSuggestionRequest] = useState({});
-    const inputRef = useRef()    
+    const [suggestionRequest, setSuggestionRequest] = useState<SuggestionRequest>({'modelName':"", searchText: ""});
+    const inputRef = useRef(null)    
 
     
     
@@ -161,7 +160,7 @@ const AIStylerUI = ({modelName}) => {
 }
 
 
-const AIModel = ({params}) => {
+const AIModel = ({params}:{params:{'modelName':string}}) => {
     
     if( params.modelName in AI_STYLERS ){
         return (<AIStylerUI modelName={params.modelName} />)
