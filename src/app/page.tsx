@@ -1,3 +1,6 @@
+
+import SignInOutButton from '@/components/signInOut';
+import { Button } from '@/components/ui/button';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -82,43 +85,57 @@ const StylersSection =() => {
 
 }
 
+
+
+
+
+
 export default function Home() {
   return (
       <div>
   <header className='relative top-0 left-0 right-0 z-10 shadow-md'>
-          <nav className=" py-6 flex justify-between items-center container mx-auto" >
+          <nav className=" py-6 flex justify-between align-middle items-center container mx-auto" >
             <Link href="/" 
                   className='text-xl font-bold tracking-wide font-sans subpixel-antialiased hover:font-extrabold'>
-               <span className={'text-2xl'}>&#129434;</span> 
+               <span className={'text-2xl'}>&#129434;&nbsp;</span> 
                Fitzyo
             </Link>
-            <div className={'flex justify-between space-x-20'} >
-              <Link className='py-1 hover:text-green-400' 
+
+            <Link className=' hover:text-green-400' 
+                href="/aboutUs" > 
+                Business Partners
+            </Link>
+
+            <Link className=' hover:text-green-400' 
+                href="/aboutUs" > 
+                Services
+            </Link>
+
+            <Link className=' hover:text-green-400' 
                 href="/aboutUs" > 
                 About us
             </Link>
-              <Link href='/signIn'>
-              <div className='bg-green-600 shadow-md py-1 px-2 rounded-sm text-sm text-white font-sans font-semibold hover:bg-green-400'>
-                Sign In
-              </div>
-              </Link>
-            </div>  
+
+            <SignInOutButton />
+
+            
           </nav>          
 </header>
-<section className='my-12 container mx-auto'>
-          <div className={'bg-neutral-50 px-6 py-20 text-center text-neutral-800'}>
-            <h1 className={'mb-6 text-5xl font-bold'}> Measure once, buy anywhere.</h1>
-            <h3 className={'mb-4 font-medium'}>Fitzyo is your fashion assistant, <span className={'bg-yellow-200'}> perfected!</span>.</h3>            
-            <p className={'my-8 text-center mx-auto w-8/12 font-medium text-green-600'}>
-            <span className={'mb-4'}>Fitzyo helps in finding stuff that just fits you, using your Retail passport issued at our partners location.</span>
-            </p>
-            <p className={'mb-4 text-center mx-auto w-8/12 font-medium text-green-600'}>              
-              
-              <span>Sign up!,</span>
-              <span className='font-semibold'> Get your Retail Passport,</span>
-              <span> Shop with our AI Stylers.</span>
-            </p>
-          </div>
+<section className='my-12 mx-auto px-6 py-20 text-center text-neutral-800'>
+
+      <h2 className="scroll-m-20 pb-2 text-3xl font-semibold tracking-tight transition-colors first:mt-0">
+        Measure once, buy anywhere.
+      </h2>
+      <h3 className={'mb-4 font-medium'}>Fitzyo is your fashion assistant, <span className={'bg-yellow-200'}> perfected!</span>.</h3>            
+      <p className={'my-8 text-center mx-auto w-8/12 font-medium text-green-600'}>
+      <span className={'mb-4'}>Fitzyo helps in finding stuff that just fits you, using your Retail passport issued at our partners location.</span>
+      </p>
+      <p className={'mb-4 text-center mx-auto w-8/12 font-medium text-green-600'}>              
+      <span>Sign up!,</span>
+      <span className='font-semibold'> Get your Retail Passport,</span>
+      <span> Shop with our AI Stylers.</span>
+      </p>
+          
   </section>
 
   {/* Retail passport */}  
