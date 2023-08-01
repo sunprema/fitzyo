@@ -4,22 +4,24 @@ import { IconArrowLeft } from '@tabler/icons-react';
 import Link from 'next/link';
 import { Auth } from '@supabase/auth-ui-react'
 import { createClient } from '@supabase/supabase-js'
+import type { Session } from '@supabase/supabase-js';
 import {
   // Import predefined theme
   ThemeSupa,
 } from '@supabase/auth-ui-shared'
 
+
 import {useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation';
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
 
 const SignInPage = () => {
-  const [session, setSession ] = useState(null)
+  const [session, setSession ] = useState<Session | null>(null)
   const router = useRouter()
 
   useEffect( () => {
@@ -88,7 +90,7 @@ const SignInPage = () => {
         <div>Logged in!</div>
         <button onClick={() => supabase.auth.signOut()}>Sign out</button>
         <p><pre>
-          { JSON.stringify( session, " ", 2) }
+          { JSON.stringify( session, null, 2) }
 
         </pre>
         </p>
