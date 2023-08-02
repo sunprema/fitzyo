@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { getSuggestionsFromChatGpt } from "../../utils/openAI";
-import { sleep } from "../../utils/utilFunctions";
+import type { NextRequest } from "next/server";
 
 
 
 
-export  async function POST( request ){
+export  async function POST( request:NextRequest ){
 
     console.log(request)
     const req = await request.json()

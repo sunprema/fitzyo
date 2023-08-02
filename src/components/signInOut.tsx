@@ -7,13 +7,13 @@ import { useEffect, useState } from 'react'
 
 
 const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
 )
 
 
 
-const SignInOutButton = (props:any) => {
+const SignInOutButton = () => {
     
     const [user, setUser] = useState<User | null>()
     const router = useRouter();
@@ -40,7 +40,7 @@ const SignInOutButton = (props:any) => {
         await supabase.auth.signOut();
         router.refresh()
     }
-    var button = null ;
+    let button = null ;
     if (user != null ){
         button = <Button onClick={ handleSignOut }> Sign out 
         </Button>
