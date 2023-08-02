@@ -39,6 +39,7 @@
   },
   "devDependencies": {
     "@types/react": "18.2.15",
+    "@typescript-eslint/eslint-plugin": "^5.62.0",
     "encoding": "^0.1.13",
     "supabase": "^1.82.2"
   }

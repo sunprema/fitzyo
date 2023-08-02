@@ -1,5 +1,5 @@
 'use client'
-import { IconArrowLeft, IconCircleChevronRight, IconCircleArrowRightFilled } from '@tabler/icons-react'
+import { IconArrowLeft, IconCircleArrowRightFilled } from '@tabler/icons-react'
 import Link from 'next/link'
 import React, { useState, useRef } from 'react'
 import axios from 'axios'
@@ -12,11 +12,6 @@ const AI_STYLERS :{[key:string] : string} = {'zebra' : '🦓',
  'lion': '🦁',
  'leopard': '🐆',}
 
-
-const AI_STYLERS_UNICODE = ['zebra', 'peacock', 'lion', 'leopard']
-
-let dd: StylerSuggestion 
-
 interface SuggestionRequest {
     modelName : string;
     searchText: string;
@@ -24,7 +19,7 @@ interface SuggestionRequest {
 
 const fetcher = async (suggestionRequestData:SuggestionRequest) => {
     console.log( suggestionRequestData)
-    let response = await axios.post('/api/models/suggestions', suggestionRequestData , {'timeout' : 15000})
+    const response = await axios.post('/api/models/suggestions', suggestionRequestData , {'timeout' : 15000})
     return response.data    
     
 }
@@ -42,7 +37,7 @@ const useSearchSuggestionHook = (suggestionRequest:SuggestionRequest) => {
 
 const SearchSuggestionUI = ({suggestionRequest}:{suggestionRequest:SuggestionRequest})=> {
     const { data, error, isLoading} = useSearchSuggestionHook( suggestionRequest)
-    var returnElement = <h1>Loading...</h1>
+    let returnElement = <h1>Loading...</h1>
     if (isLoading) returnElement = <h1>Loading...</h1>
     if (error) returnElement = <h1> {` Error : ${error}`}</h1>
     if(data) returnElement = <p><pre>{ JSON.stringify(data, null, 2) }</pre></p>
