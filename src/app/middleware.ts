@@ -13,5 +13,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-    matcher : ['/retailPassports', '/admin', '/api/:path*'],
+    matcher : ['/userHome','/retailPassports', '/admin', '/api/:path*'],
 };
