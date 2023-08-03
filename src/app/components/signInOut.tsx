@@ -1,40 +1,32 @@
 'use client'
 import { User } from '@supabase/supabase-js'
-import { Button } from './ui/button'
+import { Button } from '../../components/ui/button'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { useConfig } from '@/app/components/configContext'
 
 
-const supabase = createClientComponentClient()
 
 
 
 const SignInOutButton = () => {
     
-    const [user, setUser] = useState<User | null>()
     const router = useRouter();
-    
-    useEffect(() => {
-
-        const getUser = async() => {
-            const { data: {user}} = await supabase.auth.getUser();
-            setUser( user)
-        }
-        getUser()        
-    },[])
-
-    
+    const config = useConfig();
 
     const handleSignOut = async () => {
-        await supabase.auth.signOut();
-        router.replace("/signIn")
+        await config.supabase.auth.signOut();
+        config.setIsLoggedIn(false);
+        router.replace("/")
     }
+
     let button = null ;
-    if (user != null ){
+
+    if (config.isLoggedIn ){
         button = <Button onClick={ handleSignOut }> Sign out 
         </Button>
+    
     }else{
         button = <Button asChild>
               <Link href='/signIn'>
@@ -42,9 +34,8 @@ const SignInOutButton = () => {
               </Link>
         </Button>
     }
-
+    
     return button
     
 }
-
 export default SignInOutButton ;

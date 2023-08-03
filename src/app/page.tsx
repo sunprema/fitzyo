@@ -1,5 +1,5 @@
 
-import SignInOutButton from '@/components/signInOut';
+import SignInOutButton from '@/app/components/signInOut';
 import Link from 'next/link';
 
 

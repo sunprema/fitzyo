@@ -1,6 +1,7 @@
 
 import { IconArrowLeft } from '@tabler/icons-react';
 import Link from 'next/link';
+import { ConfigProvider } from '@/app/components/configContext'
 
 
 
@@ -10,7 +11,8 @@ export default function UserHomeLayout(
     ){
 
     return (
-       <> 
+       <>
+        
        <div className={'w-full'}>
             {/* Sign In Header */}
             <nav className={'py-6  shadow-md items-center'}>

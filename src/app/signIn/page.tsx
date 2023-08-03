@@ -8,22 +8,25 @@ import {
   // Import predefined theme
   ThemeSupa,
 } from '@supabase/auth-ui-shared'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 import {useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation';
+import { useConfig } from '../components/configContext';
 
-const supabase = createClientComponentClient()
+//const supabase = createClientComponentClient()
 
 
 const SignInPage = () => {
   const [session, setSession ] = useState<Session | null>(null)
   const router = useRouter()
+  const config  = useConfig();
+  const supabase = config.supabase;
 
   useEffect( () => {
     
     supabase.auth.getSession().then( ({data:{ session } }) => {
       setSession( session );
+      config.setIsLoggedIn(true);
     } )
 
     const { data: {subscription} } = supabase.auth.onAuthStateChange( (_event, session) => {
@@ -32,7 +35,7 @@ const SignInPage = () => {
     
     return () => subscription.unsubscribe();
 
-  },[])
+  },[config, supabase])
 
   if ( session != null ){
     router.replace('/userHome')
