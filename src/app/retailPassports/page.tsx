@@ -1,5 +1,7 @@
 const RetailPassports = () => {
-    //here get data from RetailPassport table
+    return (
+        <h1> Hello</h1>
+    )
 
 }
 

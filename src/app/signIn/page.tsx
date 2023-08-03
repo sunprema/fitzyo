@@ -3,21 +3,17 @@
 import { IconArrowLeft } from '@tabler/icons-react';
 import Link from 'next/link';
 import { Auth } from '@supabase/auth-ui-react'
-import { createClient } from '@supabase/supabase-js'
 import type { Session } from '@supabase/supabase-js';
 import {
   // Import predefined theme
   ThemeSupa,
 } from '@supabase/auth-ui-shared'
-
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
 import {useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
-)
+const supabase = createClientComponentClient()
 
 
 const SignInPage = () => {
@@ -39,7 +35,7 @@ const SignInPage = () => {
   },[])
 
   if ( session != null ){
-    router.push('/userHome')
+    router.replace('/userHome')
   }
   return (
 
