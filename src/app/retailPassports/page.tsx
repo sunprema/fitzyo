@@ -24,5 +24,5 @@ const RetailPassports = async () => {
     )
 
 }
-
+export const dynamic = 'force-dynamic'
 export default RetailPassports ;
