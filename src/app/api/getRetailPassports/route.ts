@@ -1,18 +1,28 @@
-import { NextResponse } from "next/server";
-
-import { sleep } from "../utils/utilFunctions";
-import type { NextRequest } from "next/server";
-
+import { NextResponse, NextRequest } from "next/server";
+import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
+import { Database } from '@/types/supabase';
 
 export async function POST(request:NextRequest){
-    console.log(request)
+    
+    const supabase = createServerComponentClient<Database>({
+        cookies,
+    })
+    
+    const {
+        data: { session },
+    } = await supabase.auth.getSession()
+    
+    if (!session){
+        return NextResponse.json( {"message" : "User Not found"} , {"status" : 400})
+    }
+    else {
     const req = await request.json()
     console.log( req)
-    //process the request here
+    return NextResponse.json({session});
+    }
+    
+    
 
-    await sleep(5000)
-
-    const res = { req, 'Status': 'Success'}
-
-    return NextResponse.json({res});
+    
 }
