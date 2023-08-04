@@ -1,6 +1,5 @@
 
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { notFound, redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 
 import { Database } from '@/types/supabase';
@@ -19,6 +18,7 @@ const RetailPassports = async () => {
         <pre>
             {JSON.stringify(session, null , 2)}
         </pre>
+        <h2> {session?.user.email}</h2>
         </>       
 
     )
