@@ -4,10 +4,10 @@ import path from "path"
 
 import { StylerSuggestion } from "../../../../schemas/stylerSchema";
 
-import { createJsonTranslator, processRequests , createOpenAILanguageModel} from "typechat";
+import { createJsonTranslator, createOpenAILanguageModel} from "typechat";
 
 //USING TYPECHAT TO DEAL WITH OPENAI
-let typeChatModel = createOpenAILanguageModel( process.env.AI_STYLER_KEY!,"gpt-3.5-turbo" );
+const typeChatModel = createOpenAILanguageModel( process.env.AI_STYLER_KEY ?? "","gpt-3.5-turbo" );
 const schema = fs.readFileSync(path.join(process.cwd(), "/schemas/stylerSchema.ts"), "utf8");
 const translator = createJsonTranslator<StylerSuggestion>(typeChatModel, schema, "StylerSuggestion");
 

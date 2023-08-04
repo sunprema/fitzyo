@@ -3,31 +3,30 @@
 import { IconArrowLeft } from '@tabler/icons-react';
 import Link from 'next/link';
 import { Auth } from '@supabase/auth-ui-react'
-import { createClient } from '@supabase/supabase-js'
 import type { Session } from '@supabase/supabase-js';
 import {
   // Import predefined theme
   ThemeSupa,
 } from '@supabase/auth-ui-shared'
 
-
 import {useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation';
+import { useConfig } from '../components/configContext';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+//const supabase = createClientComponentClient()
 
 
 const SignInPage = () => {
   const [session, setSession ] = useState<Session | null>(null)
   const router = useRouter()
+  const config  = useConfig();
+  const supabase = config.supabase;
 
   useEffect( () => {
     
     supabase.auth.getSession().then( ({data:{ session } }) => {
       setSession( session );
+      config.setIsLoggedIn(true);
     } )
 
     const { data: {subscription} } = supabase.auth.onAuthStateChange( (_event, session) => {
@@ -36,10 +35,10 @@ const SignInPage = () => {
     
     return () => subscription.unsubscribe();
 
-  },[])
+  },[config, supabase])
 
   if ( session != null ){
-    router.push('/userHome')
+    router.replace('/userHome')
   }
   return (
 

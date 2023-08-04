@@ -1,7 +1,5 @@
 
-import SignInOutButton from '@/components/signInOut';
-import { Button } from '@/components/ui/button';
-import Image from 'next/image';
+import SignInOutButton from '@/app/components/signInOut';
 import Link from 'next/link';
 
 

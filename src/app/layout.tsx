@@ -1,10 +1,9 @@
 import './globals.css'
 import { ThemeProvider } from '@/components/ui/theme-provider'
-
-import { Inter } from 'next/font/google'
-import Link from 'next/link'
-
-const inter = Inter({ subsets: ['latin'] })
+import { ConfigProvider } from '@/app/components/configContext'
+import '@/app/globals.css';
+import { fontSans } from '@/lib/fonts';
+import { cn } from '@/lib/utils';
 
 export const metadata = {
   title: 'Fitzyo',
@@ -13,10 +12,14 @@ export const metadata = {
 
 export default function RootLayout({ children, } : { children : React.ReactNode}) {
   return (
-    <html lang="en">
-      <body className={inter.className} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
+      <head/>
+      <body className={cn('min-h-screen bg-background font-sans antialiased', fontSans.variable)} >
+
       <ThemeProvider attribute='class' defaultTheme='system' enableSystem>      
+        <ConfigProvider>
         {children}
+        </ConfigProvider>
       </ThemeProvider>       
       </body>
     </html>

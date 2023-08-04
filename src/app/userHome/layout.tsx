@@ -5,12 +5,14 @@ import Link from 'next/link';
 
 
 
+
 export default function UserHomeLayout(
     { children, } : { children : React.ReactNode}
     ){
 
     return (
-       <> 
+       <>
+
        <div className={'w-full'}>
             {/* Sign In Header */}
             <nav className={'py-6  shadow-md items-center'}>
