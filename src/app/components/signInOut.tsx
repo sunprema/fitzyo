@@ -1,14 +1,8 @@
 'use client'
-import { User } from '@supabase/supabase-js'
 import { Button } from '../../components/ui/button'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
 import { useConfig } from '@/app/components/configContext'
-
-
-
-
 
 const SignInOutButton = () => {
     
