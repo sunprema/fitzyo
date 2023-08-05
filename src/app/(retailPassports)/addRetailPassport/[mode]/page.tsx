@@ -15,6 +15,24 @@ import {
 
 
 const ImportForm = () => {
+
+    const ImportSchema = z.object({
+       passportId : z
+        .string({required_error : 'Please enter the Retail Passport reference id'})
+        .min(5, {message: 'Minimum length is 5 characters'})
+        .max(15, {message: 'Maximum length is 15 characters'}) 
+    })
+
+    const importForm = useForm<z.infer<typeof ImportSchema>>({
+        resolver: zodResolver(ImportSchema)
+    })
+
+    async function onSubmit( data:z.infer<typeof ImportSchema>){
+        const res = await fetch('/api/')
+    }
+
+
+
     return <h1>Import form</h1>
 }
 
