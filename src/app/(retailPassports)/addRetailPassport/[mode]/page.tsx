@@ -93,7 +93,7 @@ const WomenForm = () => {
 
 
 
-export default function Page({ params }: { params: { mode: string } }) {
+const  Page = ({ params }: { params: { mode: string } }) => {
     
     switch( params.mode){
 
@@ -109,7 +109,7 @@ export default function Page({ params }: { params: { mode: string } }) {
         default :
             return <h1> Mode {params.mode} not valid</h1>   
     }
-
-
     
 }
+
+export default Page ;
