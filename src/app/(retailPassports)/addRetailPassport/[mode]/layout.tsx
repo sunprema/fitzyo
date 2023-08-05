@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { IconArrowLeft } from '@tabler/icons-react';
+import { Toaster } from '@/components/ui/toaster';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -23,7 +24,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </Link>
         </div>
       </nav>
-      <div className="container mx-auto">{children}</div>
+
+      <div className="flex flex-1 flex-col">
+        <div className="container mx-auto flex flex-1 justify-center overflow-y-auto px-4">{children}</div>
+      <Toaster />
+      </div>
+
+      
+
+      
     </div>
   );
 }

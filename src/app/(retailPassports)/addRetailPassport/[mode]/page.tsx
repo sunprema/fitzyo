@@ -17,9 +17,11 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { sleep } from '@/app/api/utils/utilFunctions';
+import { useToast } from "@/components/ui/use-toast"
 
 const ImportForm = () => {
   const [importing, setImporting] = useState<boolean>(false);
+  const {toast} = useToast()
 
   const ImportSchema = z.object({
     passportId: z
@@ -33,16 +35,23 @@ const ImportForm = () => {
   });
 
   async function onSubmit(data: z.infer<typeof ImportSchema>) {
+    toast({
+        title: "Imported data for Retail Passport",
+        description: "Friday, February 10, 2023 at 5:57 PM",
+            
+    })
     setImporting(true);
     console.log(JSON.stringify(data, null, 2));
     await sleep(3000);
+    
     setImporting(false);
+    
   }
 
   return (
     <div className={'flex flex-col items-center'}>
       <section className={'my-8 flex w-full flex-col items-center'}>
-        <h1 className={'text-3xl font-extrabold leading-tight tracking-tighter md:text-4xl'}>
+        <h1 className={'text-xl font-semibold leading-tight tracking-tighter md:text-2xl'}>
           Import Retail Passport
         </h1>
         <Form {...importForm}>
@@ -74,6 +83,13 @@ const ImportForm = () => {
           </form>
         </Form>
       </section>
+      <Button onClick={ () => {
+        alert("Hello")
+        toast({
+        title: "Imported data for Retail Passport, You can add a nick name and save ",
+        description: "Friday, February 10, 2023 at 5:57 PM",
+        variant : 'destructive'       
+    })}}>Click me</Button>
     </div>
   );
 };
