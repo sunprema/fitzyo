@@ -15,6 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import RetailPassportCard from './retailPassport';
 
 const RetailPassports = async () => {
   const supabase = createServerComponentClient<Database>({
@@ -24,6 +25,22 @@ const RetailPassports = async () => {
     data: { session },
   } = await supabase.auth.getSession();
 
+  let retailPassports = null ;
+
+  if( session?.user ){
+    const { data: USER_RETAIL_PASSPORTS, error }= await supabase
+    .from('USER_RETAIL_PASSPORTS')
+    .select("*")
+
+    if(error == null){
+      console.log(JSON.stringify(USER_RETAIL_PASSPORTS, null, 2))
+      retailPassports = USER_RETAIL_PASSPORTS
+    }else{
+      console.log(error)
+    }
+    
+  }
+  
   console.log(JSON.stringify(session, null, 2));
 
   return (
@@ -83,6 +100,18 @@ const RetailPassports = async () => {
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+        </div>
+        <div>
+          {
+            retailPassports?.map( (retailPassport) => {
+              return (
+              <div key={retailPassport.id}>
+                <RetailPassportCard userRetailPassport={retailPassport}/>
+                
+              </div>
+              )
+            })
+          }
         </div>
       </div>
     </div>
