@@ -1,7 +1,6 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-import { IconArrowLeft } from '@tabler/icons-react';
 import { ChevronDown, Import, User, User2 } from 'lucide-react';
 
 import { Database } from '@/types/supabase';
@@ -16,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import RetailPassportCard from './retailPassport';
+import BackButton from '@/app/components/backButton';
 
 const RetailPassports = async () => {
   const supabase = createServerComponentClient<Database>({
@@ -48,11 +48,7 @@ const RetailPassports = async () => {
       {/* Sign In Header */}
       <nav className={'items-center  py-6 shadow-md'}>
         <div className={'container mx-auto flex justify-between gap-3'}>
-          <div className={'rounded-full bg-slate-100 p-1 hover:bg-slate-200'}>
-            <Link href="/">
-              <IconArrowLeft />{' '}
-            </Link>
-          </div>
+          <BackButton />
 
           <h4 className={'font-semibold'}> Retail Passports</h4>
           <Link
@@ -102,16 +98,21 @@ const RetailPassports = async () => {
           </DropdownMenu>
         </div>
         <div>
-          {
-            retailPassports?.map( (retailPassport) => {
-              return (
-              <div key={retailPassport.id}>
-                <RetailPassportCard userRetailPassport={retailPassport}/>
+          <div  className={'flex gap-4 mt-16'}>
                 
-              </div>
-              )
-            })
-          }
+            {retailPassports?.map( 
+              (retailPassport) =>
+              
+              <RetailPassportCard 
+                key={retailPassport.id}
+                userRetailPassport={retailPassport} />
+            )
+            }
+                
+            </div>
+              
+          
+          
         </div>
       </div>
     </div>

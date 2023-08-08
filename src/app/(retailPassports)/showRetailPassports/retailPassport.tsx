@@ -1,5 +1,6 @@
 
 
+import { Badge } from "@/components/ui/badge";
 import {
     Card,
     CardContent,
@@ -10,13 +11,30 @@ import {
  } from "@/components/ui/card"
  import { Database } from '@/types/supabase';
 
+
  export default function RetailPassport({ 
     userRetailPassport 
 }: {
-    userRetailPassport: Database['public']['Tables']['USER_RETAIL_PASSPORTS']['Row'] | null
+    userRetailPassport: Database['public']['Tables']['USER_RETAIL_PASSPORTS']['Row']
     }){
     return (
-        <h1>{userRetailPassport?.nick_name}</h1>
+        
+    <Card className="w-[350px]">
+      <CardHeader>
+        <CardTitle>{userRetailPassport.nick_name}</CardTitle>
+        <CardDescription>
+            Retail passport created on 
+            <Badge variant="secondary" className={'rounded-sm'}>{userRetailPassport.created_at}</Badge>
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+      </CardContent>
+      <CardFooter className="flex justify-between">
+       
+      </CardFooter>
+    </Card>    
+
+        
     )
 
 }

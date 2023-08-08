@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { IconArrowLeft } from '@tabler/icons-react';
+import BackButton from '../components/backButton';
 
 export default function UserHomeLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -8,11 +8,7 @@ export default function UserHomeLayout({ children }: { children: React.ReactNode
         {/* Sign In Header */}
         <nav className={'items-center  py-6 shadow-md'}>
           <div className={'container mx-auto flex justify-between gap-3'}>
-            <div className={'rounded-full bg-slate-100 p-1 hover:bg-slate-200'}>
-              <Link href="/">
-                <IconArrowLeft />{' '}
-              </Link>
-            </div>
+            <BackButton />
             <h4 className={'font-semibold'}>Retail passports</h4>
             <Link
               href="/"
