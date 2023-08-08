@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 import { Slider } from "@/components/ui/slider"
+import axios from 'axios';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -20,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { sleep } from '@/app/api/utils/utilFunctions';
 import { useToast } from "@/components/ui/use-toast"
 
+
 const MenForm = () => {
     const [saving, setSaving] = useState<boolean>(false);
     const {toast} = useToast()
@@ -29,8 +31,8 @@ const MenForm = () => {
       nick_name:z
       .string({required_error :'Nick name is required'})
       .min(3,{message: 'Minimum of three characters'})
-      .max(30, {message: 'Max of 30 characters'})
-      .default("John Doe"),
+      .max(30, {message: 'Max of 30 characters'}),
+      
       
       shirt_neck:z
       .coerce
@@ -38,7 +40,8 @@ const MenForm = () => {
       .gt(11,{message: 'Should be greater than 11'})
       .lt(20,{message: 'Should be less than 20'})
       .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
+      .positive({message : 'Number should be positive'})
+      .default(15),
 
       shirt_chest:z
       .coerce
@@ -164,14 +167,49 @@ const MenForm = () => {
   
     const menForm = useForm<z.infer<typeof MenFormSchema>>({
       resolver: zodResolver(MenFormSchema),
+      defaultValues:{
+        nick_name: 'John Doe',
+        shirt_neck: 15,
+        shirt_chest: 40,
+        shirt_waist: 36,
+        shirt_sleeve_length:35,
+        shirt_length: 30,
+        pant_waist: 34,
+        pant_hips: 40,
+        pant_inseam: 32,
+        pant_outseam:34,
+        belt_waist_size: 34,
+        belt_length:36,
+        shoe_foot_length:10,
+        shoe_foot_width:5,
+        shoe_arch_length:10,
+        glove_hand_circumference:8,
+        glove_hand_length:7
+
+      }
     });
   
     async function onSubmit(data: z.infer<typeof MenFormSchema>) {
-      toast({
-          title: "Submitted data for Retail Passport",
-          description: "Friday, February 10, 2023 at 5:57 PM",
+      try{
+        const response = await axios.post("/api/addRetailPassport", data)
+
+        toast({
+          title: "Retail passport added",
+          description: JSON.stringify(response.data, null, 2),
+              
+        })
+
+      }catch(error){
+        toast({
+          title: "Retail passport addition failed",
+          description: "Errror ",
+          variant:"destructive",
               
       })
+
+      }
+      console.log(data)
+      
       setSaving(true);
       console.log(JSON.stringify(data, null, 2));
       await sleep(3000);
@@ -196,7 +234,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Nick name for this Retail passport</FormLabel>
                       <FormControl>
-                        <Input defaultValue={"John Doe"}  {...field}></Input>
+                        <Input  {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -217,7 +255,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Neck size</FormLabel>
                       <FormControl>
-                        <Input defaultValue={15}  {...field}></Input>
+                        <Input  {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -236,7 +274,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Chest size</FormLabel>
                       <FormControl>
-                        <Input defaultValue={40} {...field}></Input>
+                        <Input  {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -254,7 +292,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Waist size for shirt</FormLabel>
                       <FormControl>
-                        <Input defaultValue={30} {...field}></Input>
+                        <Input  {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -272,7 +310,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Sleeve length</FormLabel>
                       <FormControl>
-                        <Input defaultValue={35} {...field}></Input>
+                        <Input  {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -290,7 +328,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Shirt length</FormLabel>
                       <FormControl>
-                        <Input defaultValue={30} {...field}></Input>
+                        <Input {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -308,7 +346,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Waist size for pant</FormLabel>
                       <FormControl>
-                        <Input defaultValue={30} {...field}></Input>
+                        <Input {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -326,7 +364,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Hip size for pant</FormLabel>
                       <FormControl>
-                        <Input defaultValue={40} {...field}></Input>
+                        <Input  {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -344,7 +382,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Inseam for pant</FormLabel>
                       <FormControl>
-                        <Input  defaultValue={32} {...field}></Input>
+                        <Input   {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -362,7 +400,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Outseam for pant</FormLabel>
                       <FormControl>
-                        <Input defaultValue={35} {...field}></Input>
+                        <Input  {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -380,7 +418,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Waist size for belts</FormLabel>
                       <FormControl>
-                        <Input defaultValue={36} {...field}></Input>
+                        <Input  {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -398,7 +436,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Belt length</FormLabel>
                       <FormControl>
-                        <Input defaultValue={38} {...field}></Input>
+                        <Input  {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -416,7 +454,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Foot length for shoe</FormLabel>
                       <FormControl>
-                        <Input defaultValue={10} {...field}></Input>
+                        <Input  {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -435,7 +473,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Foot width for shoe</FormLabel>
                       <FormControl>
-                        <Input defaultValue={5} {...field}></Input>
+                        <Input  {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -453,7 +491,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Foot arch length for shoe</FormLabel>
                       <FormControl>
-                        <Input defaultValue={9.5} {...field}></Input>
+                        <Input  {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -471,7 +509,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Glove hand circumference</FormLabel>
                       <FormControl>
-                        <Input defaultValue={8.5} {...field}></Input>
+                        <Input  {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
@@ -490,7 +528,7 @@ const MenForm = () => {
                     <div className={'mt-4 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Glove hand length</FormLabel>
                       <FormControl>
-                        <Input defaultValue={7} {...field}></Input>
+                        <Input  {...field}></Input>
                       </FormControl>
                     </div>
                     <FormDescription>
