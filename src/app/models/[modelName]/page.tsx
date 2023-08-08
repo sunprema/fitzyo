@@ -2,11 +2,12 @@
 
 import React, { useRef, useState } from 'react';
 import Link from 'next/link';
-import { IconArrowLeft, IconCircleArrowRightFilled } from '@tabler/icons-react';
+import { IconCircleArrowRightFilled } from '@tabler/icons-react';
 import axios from 'axios';
 import useSWR, { SWRConfig } from 'swr';
 
 import { StylerSuggestion } from '../../../../schemas/stylerSchema';
+import BackButton from '@/app/components/backButton';
 
 const AI_STYLERS: { [key: string]: string } = {
   zebra: '🦓',
@@ -79,11 +80,7 @@ const AIStylerUI = ({ modelName }: { modelName: string }) => {
       {/*Header */}
       <nav className={'items-center  py-6 shadow-md'}>
         <div className={'container mx-auto flex justify-between gap-3'}>
-          <div className={'rounded-full bg-slate-100 p-1 hover:bg-slate-200'}>
-            <Link href="/">
-              <IconArrowLeft />{' '}
-            </Link>
-          </div>
+          <BackButton />
 
           <h4 className={'font-semibold'}> AI Styler </h4>
           <Link

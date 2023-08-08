@@ -9,9 +9,9 @@ import {
   ThemeSupa,
 } from '@supabase/auth-ui-shared';
 import type { Session } from '@supabase/supabase-js';
-import { IconArrowLeft } from '@tabler/icons-react';
 
 import { useConfig } from '../components/configContext';
+import BackButton from '../components/backButton';
 
 //const supabase = createClientComponentClient()
 
@@ -44,11 +44,7 @@ const SignInPage = () => {
       {/* Sign In Header */}
       <nav className={'items-center  py-6 shadow-md'}>
         <div className={'container mx-auto flex justify-between gap-3'}>
-          <div className={'rounded-full bg-slate-100 p-1 hover:bg-slate-200'}>
-            <Link href="/">
-              <IconArrowLeft />{' '}
-            </Link>
-          </div>
+          <BackButton />
 
           <h4 className={'font-semibold'}> Sign in</h4>
           <Link
