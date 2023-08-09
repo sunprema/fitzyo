@@ -5,7 +5,6 @@ import {
     Card,
     CardContent,
     CardDescription,
-    CardFooter,
     CardHeader,
     CardTitle,
  } from "@/components/ui/card"
@@ -24,14 +23,11 @@ import {
         <CardTitle>{userRetailPassport.nick_name}</CardTitle>
         <CardDescription>
             Retail passport created on 
-            <Badge variant="secondary" className={'rounded-sm'}>{userRetailPassport.created_at}</Badge>
+            <Badge variant="secondary" className={'rounded-xl'}>{userRetailPassport.created_at}</Badge>
         </CardDescription>
       </CardHeader>
       <CardContent>
-      </CardContent>
-      <CardFooter className="flex justify-between">
-       
-      </CardFooter>
+      </CardContent>      
     </Card>    
 
         

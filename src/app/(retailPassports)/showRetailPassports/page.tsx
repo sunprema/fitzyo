@@ -55,7 +55,7 @@ const RetailPassports = async () => {
             href="/"
             className="font-sans text-xl font-bold tracking-wide subpixel-antialiased hover:font-extrabold"
           >
-            {' '}
+            
             <span className={'text-2xl'}>&#129434;</span> Fitzyo
           </Link>
         </div>
@@ -98,7 +98,7 @@ const RetailPassports = async () => {
           </DropdownMenu>
         </div>
         <div>
-          <div  className={'flex gap-4 mt-16'}>
+          <div  className={'mt-16 flex flex-wrap gap-8'}>
                 
             {retailPassports?.map( 
               (retailPassport) =>

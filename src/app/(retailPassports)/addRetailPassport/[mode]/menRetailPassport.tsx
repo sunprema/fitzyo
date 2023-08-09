@@ -21,6 +21,13 @@ import { Input } from '@/components/ui/input';
 import { sleep } from '@/app/api/utils/utilFunctions';
 import { useToast } from "@/components/ui/use-toast"
 
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs"
+
 
 const MenForm = () => {
     const [saving, setSaving] = useState<boolean>(false);
@@ -226,12 +233,14 @@ const MenForm = () => {
           </h1>
           <Form {...menForm}>
             <form onSubmit={menForm.handleSubmit(onSubmit)}>
+
+
             <FormField
                 control={menForm.control}
                 name="nick_name"
                 render={({ field }) => (
                   <FormItem>
-                    <div className={'mt-4 flex flex-col gap-2'}>
+                    <div className={'mt-16 flex flex-col gap-2'}>
                       <FormLabel className={'min-w-fit'}>Nick name for this Retail passport</FormLabel>
                       <FormControl>
                         <Input  {...field}></Input>
@@ -244,7 +253,18 @@ const MenForm = () => {
                   </FormItem>
                 )}
               />
-            <div className={'grid grid-cols-1 md:grid-cols-3 gap-8'}>
+
+            <Tabs defaultValue="shirt" className="w-full mt-16">
+              <TabsList className="grid w-full grid-cols-5">
+                <TabsTrigger value="shirt">Shirt</TabsTrigger>
+                <TabsTrigger value="pant">Pants</TabsTrigger>
+                <TabsTrigger value="belt">Belts</TabsTrigger>
+                <TabsTrigger value="shoe">Shoe</TabsTrigger>
+                <TabsTrigger value="gloves">Gloves</TabsTrigger>                
+              </TabsList>
+              
+              <TabsContent value="shirt">      
+              <div className={'grid grid-cols-1 md:grid-cols-3 gap-8 m-16 p-8'}>
             
 
               <FormField
@@ -338,6 +358,11 @@ const MenForm = () => {
                   </FormItem>
                 )}
               />
+              </div>
+              </TabsContent>
+
+               <TabsContent value="pant">      
+              <div className={'grid grid-cols-1 md:grid-cols-3 gap-8 m-16 p-8'}>    
               <FormField
                 control={menForm.control}
                 name="pant_waist"
@@ -410,6 +435,11 @@ const MenForm = () => {
                   </FormItem>
                 )}
               />
+              </div>
+              </TabsContent>
+
+              <TabsContent value="belt">      
+              <div className={'grid grid-cols-1 md:grid-cols-3 gap-8 m-16 p-8'}>
               <FormField
                 control={menForm.control}
                 name="belt_waist_size"
@@ -446,6 +476,12 @@ const MenForm = () => {
                   </FormItem>
                 )}
               />
+              </div>
+              </TabsContent>
+
+              <TabsContent value="shoe">      
+              <div className={'grid grid-cols-1 md:grid-cols-3 gap-8 m-16 p-8'}>
+
               <FormField
                 control={menForm.control}
                 name="shoe_foot_length"
@@ -501,6 +537,12 @@ const MenForm = () => {
                   </FormItem>
                 )}
               />
+              </div>
+              </TabsContent>
+
+              <TabsContent value="gloves">      
+              <div className={'grid grid-cols-1 md:grid-cols-3 gap-8 m-16 p-8'}>
+
               <FormField
                 control={menForm.control}
                 name="glove_hand_circumference"
@@ -538,8 +580,11 @@ const MenForm = () => {
                   </FormItem>
                 )}
               />
-
               </div>
+              </TabsContent>
+
+              </Tabs>
+              
               <div className={'flex items-center justify-center'}>
                 <Button type="submit" className={'mt-4'} disabled={saving}>
                   {saving ? 'Saving...' : 'Save'}
