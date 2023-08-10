@@ -37,7 +37,7 @@ const SignInPage = () => {
   }, [config, supabase]);
 
   if (session != null) {
-    router.replace('/userHome');
+    router.replace('/showRetailPassports');
   }
   return (
     <div className={'w-full'}>

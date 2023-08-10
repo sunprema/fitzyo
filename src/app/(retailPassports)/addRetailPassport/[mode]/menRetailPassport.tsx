@@ -298,7 +298,7 @@ const MenForm = () => {
                       </FormControl>
                     </div>
                     <FormDescription>
-                     should be between 30 to 60 inches.
+                     Measure around your chest, just under armpit.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -316,7 +316,7 @@ const MenForm = () => {
                       </FormControl>
                     </div>
                     <FormDescription>
-                     should be between 28 to 55 inches.
+                    Measure around waist at the smallest circumference..
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -334,7 +334,7 @@ const MenForm = () => {
                       </FormControl>
                     </div>
                     <FormDescription>
-                     should be between 30 to 40 inches.
+                    With elbow bent, measure from the center (back) of neck to elbow and down to wrist.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -393,7 +393,7 @@ const MenForm = () => {
                       </FormControl>
                     </div>
                     <FormDescription>
-                     should be between 36 to 48 inches.
+                     Stand, feet together, and measure around the largest circumference at hips.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
