@@ -1,6 +1,6 @@
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers'
-import { Database } from '@/types/supabase';
+import { Database } from '@/types/supabase'
 
 const Page = async ({params}:{ 'params':{'retailPassportId':string}}) => {
     const {retailPassportId}= params

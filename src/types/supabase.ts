@@ -355,7 +355,19 @@ export interface Database {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      mens_tops_brands_size: {
+        Args: {
+          retail_passport_id_input: number
+        }
+        Returns: {
+          brand_id: number
+          brand_name: string
+          brand_website: string
+          brand_description: string
+          alpha_size: string
+          numerical_size: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
