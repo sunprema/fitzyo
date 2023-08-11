@@ -7,11 +7,17 @@ import '@/app/globals.css';
 
 import { fontSans } from '@/lib/fonts';
 import { cn } from '@/lib/utils';
+import { Metadata } from 'next';
 
-export const metadata = {
+export const metadata:Metadata = {
   title: 'Fitzyo',
   description: 'Measure once, buy anywhere.',
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: 'white' },
+    { media: '(prefers-color-scheme: dark)', color: 'black' },
+  ],
 };
+
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

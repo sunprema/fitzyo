@@ -11,7 +11,8 @@
     "preview": "next build && next start",
     "typecheck": "tsc --noEmit",
     "format:write": "npx prettier --write \"**/*.{js, ts,tsx,mdx}\" --cache",
-    "format:check": "npx prettier --check \"**/*.{ts,tsx,mdx}\" --cache"
+    "format:check": "npx prettier --check \"**/*.{ts,tsx,mdx}\" --cache",
+    "supabase-type-gen" : "npx supabase gen types typescript --project-id bcrcmjntxtmradmvtnec --schema public >  ./src/types/supabase.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.1.1",
@@ -63,7 +64,7 @@
     "postcss": "^8.4.27",
     "prettier": "^3.0.1",
     "prettier-plugin-tailwindcss": "^0.4.1",
-    "supabase": "^1.82.2",
+    "supabase": "^1.83.7",
     "typescript": "^5.1.6"
   }
 }

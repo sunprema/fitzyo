@@ -9,6 +9,8 @@ import {
     CardTitle,
  } from "@/components/ui/card"
  import { Database } from '@/types/supabase';
+import Link from "next/link";
+ 
 
 
  export default function RetailPassport({ 
@@ -16,8 +18,11 @@ import {
 }: {
     userRetailPassport: Database['public']['Tables']['USER_RETAIL_PASSPORTS']['Row']
     }){
+
+    
+
     return (
-        
+    <Link href={`/useRetailPassport/${userRetailPassport.id}`}>    
     <Card className="w-[350px]">
       <CardHeader>
         <CardTitle>{userRetailPassport.nick_name}</CardTitle>
@@ -29,7 +34,7 @@ import {
       <CardContent>
       </CardContent>      
     </Card>    
-
+    </Link>
         
     )
 

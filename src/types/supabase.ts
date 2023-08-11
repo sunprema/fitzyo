@@ -9,6 +9,116 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      brand_product_categories: {
+        Row: {
+          brand_id: number | null
+          created_at: string
+          id: number
+          product_category_id: number | null
+        }
+        Insert: {
+          brand_id?: number | null
+          created_at?: string
+          id?: number
+          product_category_id?: number | null
+        }
+        Update: {
+          brand_id?: number | null
+          created_at?: string
+          id?: number
+          product_category_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_product_categories_brand_id_fkey"
+            columns: ["brand_id"]
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "brand_product_categories_product_category_id_fkey"
+            columns: ["product_category_id"]
+            referencedRelation: "product_categories"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      brand_tops_size_chart: {
+        Row: {
+          alpha_size: string | null
+          brand_id: number
+          chest_high: number | null
+          chest_low: number | null
+          hip_high: number | null
+          hip_low: number | null
+          id: number
+          neck_high: number | null
+          neck_low: number | null
+          numerical_size: number | null
+          sleeve_high: number | null
+          sleeve_low: number | null
+        }
+        Insert: {
+          alpha_size?: string | null
+          brand_id: number
+          chest_high?: number | null
+          chest_low?: number | null
+          hip_high?: number | null
+          hip_low?: number | null
+          id?: number
+          neck_high?: number | null
+          neck_low?: number | null
+          numerical_size?: number | null
+          sleeve_high?: number | null
+          sleeve_low?: number | null
+        }
+        Update: {
+          alpha_size?: string | null
+          brand_id?: number
+          chest_high?: number | null
+          chest_low?: number | null
+          hip_high?: number | null
+          hip_low?: number | null
+          id?: number
+          neck_high?: number | null
+          neck_low?: number | null
+          numerical_size?: number | null
+          sleeve_high?: number | null
+          sleeve_low?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_tops_size_chart_brand_id_fkey"
+            columns: ["brand_id"]
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      brands: {
+        Row: {
+          brand_name: string | null
+          created_at: string
+          description: string | null
+          id: number
+          website: string | null
+        }
+        Insert: {
+          brand_name?: string | null
+          created_at?: string
+          description?: string | null
+          id?: number
+          website?: string | null
+        }
+        Update: {
+          brand_name?: string | null
+          created_at?: string
+          description?: string | null
+          id?: number
+          website?: string | null
+        }
+        Relationships: []
+      }
       FITZYO_ROLES: {
         Row: {
           created_at: string | null
@@ -93,6 +203,79 @@ export interface Database {
           shoe_foot_length?: number | null
           shoe_foot_width?: number | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      partner_brands: {
+        Row: {
+          brand_id: number | null
+          created_at: string
+          id: number
+          partner_id: number | null
+        }
+        Insert: {
+          brand_id?: number | null
+          created_at?: string
+          id?: number
+          partner_id?: number | null
+        }
+        Update: {
+          brand_id?: number | null
+          created_at?: string
+          id?: number
+          partner_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_brands_brand_id_fkey"
+            columns: ["brand_id"]
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "partner_brands_partner_id_fkey"
+            columns: ["partner_id"]
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      partners: {
+        Row: {
+          created_at: string
+          id: number
+          partner_name: string
+          website: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          partner_name: string
+          website?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          partner_name?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
+      product_categories: {
+        Row: {
+          category: string | null
+          description: string | null
+          id: number
+        }
+        Insert: {
+          category?: string | null
+          description?: string | null
+          id?: number
+        }
+        Update: {
+          category?: string | null
+          description?: string | null
+          id?: number
         }
         Relationships: []
       }
