@@ -15,10 +15,16 @@ const Page = async ({params}:{ 'params':{'retailPassportId':string}}) => {
         return null;
     }
     try{
-        const {data,error} = await supabase.from("men_retail_passport").select().eq("id", retailPassportId)
+        let {data,error} = await supabase.rpc("mens_tops_brands_size",
+        {'retail_passport_id_input' : 18})
+        
+
+        if (error) console.error(error)
+        else console.log(data)
+        
         return(
             <div className={'container mx-auto'} >
-                <h1> Retail Passport {retailPassportId}</h1>
+                <h1> Retail Passport {retailPassportId} </h1>
                 <pre>
                     {JSON.stringify(data,null, 2)}
                 </pre>

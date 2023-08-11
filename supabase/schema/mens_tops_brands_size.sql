@@ -1,8 +1,9 @@
 
 drop function mens_tops_brands_size; 
+
 create or replace function mens_tops_brands_size ( retail_passport_id_input int8) 
   returns table(
-    brand_id text,
+    brand_id int8,
     brand_name text,
     brand_website text,
     brand_description text,
