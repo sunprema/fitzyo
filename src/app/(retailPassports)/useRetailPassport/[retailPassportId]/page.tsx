@@ -15,7 +15,7 @@ const Page = async ({params}:{ 'params':{'retailPassportId':string}}) => {
         return null;
     }
     try{
-        let {data,error} = await supabase.rpc("mens_tops_brands_size",
+        const {data,error} = await supabase.rpc("mens_tops_brands_size",
         {'retail_passport_id_input' : 18})
         
 
