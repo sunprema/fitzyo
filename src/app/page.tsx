@@ -116,12 +116,12 @@ export default function Home() {
           <SignInOutButton />
         </nav>
       </header>
-      <section className="mx-auto my-12 px-6 py-20 text-center text-neutral-800">
+      <section className="mx-auto my-12 px-6 py-20 text-center">
         <h2 className="scroll-m-20 pb-2 text-3xl font-semibold tracking-tight transition-colors first:mt-0">
           Measure once, buy anywhere.
         </h2>
         <h3 className={'mb-4 font-medium'}>
-          Fitzyo is your fashion assistant, <span className={'bg-yellow-200'}> perfected!</span>.
+          Fitzyo is your fashion assistant, <span> perfected!</span>.
         </h3>
         <p className={'mx-auto my-8 w-8/12 text-center font-medium text-green-600'}>
           <span className={'mb-4'}>

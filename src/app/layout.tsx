@@ -23,11 +23,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head />
-      <body className={cn('min-h-screen bg-background font-sans antialiased', fontSans.variable)}>
+      <body className={cn('min-h-screen bg-background font-sans antialiased', fontSans.variable, "from-slate-950 to-slate-700 dark:bg-gradient-to-bl")}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <ConfigProvider>{children}</ConfigProvider>
         </ThemeProvider>
       </body>
     </html>
-  );
+  )
 }
