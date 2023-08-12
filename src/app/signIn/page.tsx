@@ -63,7 +63,7 @@ const SignInPage = () => {
           <Auth
             supabaseClient={supabase}
             providers={[]}
-            theme="light"
+            theme="dark"
             localization={{
               variables: {
                 sign_in: {
