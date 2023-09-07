@@ -10,11 +10,10 @@ import {
     CardHeader,
     CardTitle,
  } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator";
- import { Database } from '@/types/supabase';
+import { Database } from '@/types/supabase';
 import Link from "next/link";
  
-function getRandomInt(max) {
+function getRandomInt(max:number) {
   return Math.floor(Math.random() * max);
 }
 
