@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "format:write": "npx prettier --write \"**/*.{js, ts,tsx,mdx}\" --cache",
     "format:check": "npx prettier --check \"**/*.{ts,tsx,mdx}\" --cache",
-    "supabase-type-gen" : "npx supabase gen types typescript --project-id bcrcmjntxtmradmvtnec --schema public >  ./src/types/supabase.ts"
+    "supabase-type-gen": "npx supabase gen types typescript --project-id bcrcmjntxtmradmvtnec --schema public >  ./src/types/supabase.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.1.1",
@@ -20,6 +20,7 @@
     "@radix-ui/react-dialog": "^1.0.4",
     "@radix-ui/react-dropdown-menu": "^2.0.5",
     "@radix-ui/react-label": "^2.0.2",
+    "@radix-ui/react-separator": "^1.0.3",
     "@radix-ui/react-slider": "^1.1.2",
     "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-tabs": "^1.0.4",
