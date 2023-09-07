@@ -1,17 +1,24 @@
-
+'use client'
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
     Card,
     CardContent,
     CardDescription,
+    CardFooter,
     CardHeader,
     CardTitle,
  } from "@/components/ui/card"
+import { Separator } from "@/components/ui/separator";
  import { Database } from '@/types/supabase';
 import Link from "next/link";
  
+function getRandomInt(max) {
+  return Math.floor(Math.random() * max);
+}
 
+const alphaSizes = ["X", "XS", "M", "L", "XL" , "XXL"] 
 
  export default function RetailPassport({ 
     userRetailPassport 
@@ -19,22 +26,44 @@ import Link from "next/link";
     userRetailPassport: Database['public']['Tables']['USER_RETAIL_PASSPORTS']['Row']
     }){
 
-    
+    const handleShare = () => {
+      const targetWindow = window.opener
+      targetWindow.postMessage(
+        {"retailPassportData": 
+          {
+            "name" : userRetailPassport.nick_name,
+            "alphaSize" : alphaSizes[getRandomInt(6)],
+            "numericalSize" : "36"        
+          }
+        }, 
+        "*"); //todo: fix this
+    }
 
     return (
-    <Link href={`/useRetailPassport/${userRetailPassport.id}`}>    
+    
     <Card className="w-[350px]">
+      
       <CardHeader>
+        <Link href={`/useRetailPassport/${userRetailPassport.id}`}> 
         <CardTitle>{userRetailPassport.nick_name}</CardTitle>
         <CardDescription>
             Retail passport created on 
             <Badge variant="secondary" className={'rounded-xl'}>{userRetailPassport.created_at}</Badge>
         </CardDescription>
-      </CardHeader>
+        </Link>
+        </CardHeader>
+        <CardFooter>
+        
+        <div className="mt-8">
+        <Button variant="secondary" className={'rounded-xl hover:bg-red-600'} onClick={handleShare}>
+          Share it with parner</Button>
+        </div>
+          
+        </CardFooter>
+      
       <CardContent>
       </CardContent>      
-    </Card>    
-    </Link>
+    </Card> 
         
     )
 
