@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import BackButton from '../components/backButton';
+import BackButton from '../../components/backButton';
 
 export default function UserHomeLayout({ children }: { children: React.ReactNode }) {
   return (

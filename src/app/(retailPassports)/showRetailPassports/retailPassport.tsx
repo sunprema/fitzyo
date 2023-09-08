@@ -54,7 +54,7 @@ const alphaSizes = ["X", "XS", "M", "L", "XL" , "XXL"]
         <CardFooter>
         
         <div className="mt-8">
-        <Button variant="secondary" className={'rounded-xl hover:bg-red-600'} onClick={handleShare}>
+        <Button variant="secondary" className={'rounded-xl hover:bg-slate-600'} onClick={handleShare}>
           Share it with parner</Button>
         </div>
           

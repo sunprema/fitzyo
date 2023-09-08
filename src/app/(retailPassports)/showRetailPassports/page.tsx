@@ -1,7 +1,7 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-import { ChevronDown, Import, User, User2 } from 'lucide-react';
+import { ChevronDown, Gem, Import, User, User2 } from 'lucide-react';
 
 import { Database } from '@/types/supabase';
 import { Button } from '@/components/ui/button';
@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import RetailPassportCard from './retailPassport';
-import BackButton from '@/app/components/backButton';
+import BackButton from '@/components/backButton';
 
 const RetailPassports = async () => {
   const supabase = createServerComponentClient<Database>({
@@ -46,17 +46,15 @@ const RetailPassports = async () => {
   return (
     <div className={'w-full'}>
       {/* Sign In Header */}
-      <nav className={'items-center  py-6 shadow-md'}>
+      <nav className={'items-center  py-6 '}>
         <div className={'container mx-auto flex justify-between gap-3'}>
           <BackButton />
 
           <h4 className={'font-semibold'}> Retail Passports</h4>
-          <Link
-            href="/"
-            className="font-sans text-xl font-bold tracking-wide subpixel-antialiased hover:font-extrabold"
-          >
-            
-            <span className={'text-2xl'}>&#129434;</span> Fitzyo
+          <Link href="/">
+          <div className="flex gap-2"><Gem className="h-6 w-6" /> 
+            <h4 className="font-sans text-xl font-bold tracking-wide subpixel-antialiased hover:font-extrabold">Fitzyo</h4>
+          </div>
           </Link>
         </div>
       </nav>

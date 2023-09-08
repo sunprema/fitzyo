@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import BackButton from '../components/backButton';
+import BackButton from '../../components/backButton';
 
 const AboutUs = () => {
   const [seconds, setSeconds] = useState(0);

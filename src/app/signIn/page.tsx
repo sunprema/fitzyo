@@ -10,8 +10,8 @@ import {
 } from '@supabase/auth-ui-shared';
 import type { Session } from '@supabase/supabase-js';
 
-import { useConfig } from '../components/configContext';
-import BackButton from '../components/backButton';
+import { useConfig } from '@/components/configContext';
+import BackButton from '@/components/backButton';
 
 //const supabase = createClientComponentClient()
 

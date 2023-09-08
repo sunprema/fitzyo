@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-import { useConfig } from '@/app/components/configContext';
+import { useConfig } from '@/components/configContext';
 
-import { Button } from '../../components/ui/button';
+import { Button } from '@/components/ui/button';
 
 const SignInOutButton = () => {
   const router = useRouter();
