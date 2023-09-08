@@ -44,14 +44,16 @@ export default function RootLayout({ children }: RootLayoutProps) {
           )}
         >
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+            <ConfigProvider>
             <div className="relative flex min-h-screen flex-col">
               <SiteHeader />
               <div className="flex-1">
-              <ConfigProvider>{children}</ConfigProvider>             
+                {children}             
               </div>
             </div>
             <TailwindIndicator />
             <Toaster />
+            </ConfigProvider>
           </ThemeProvider>
         </body>
       </html>
