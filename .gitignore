@@ -12,7 +12,10 @@ coverage
 .next/
 out/
 build
-
+# next.js
+/.next/
+/out/
+/build
 # misc
 .DS_Store
 *.pem

@@ -7,7 +7,7 @@ import axios from 'axios';
 import useSWR, { SWRConfig } from 'swr';
 
 import { StylerSuggestion } from '../../../../schemas/stylerSchema';
-import BackButton from '@/app/components/backButton';
+import BackButton from '@/components/backButton';
 
 const AI_STYLERS: { [key: string]: string } = {
   zebra: '🦓',

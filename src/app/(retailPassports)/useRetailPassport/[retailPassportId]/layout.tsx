@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Toaster } from '@/components/ui/toaster';
-import BackButton from '@/app/components/backButton';
+import BackButton from '@/components/backButton';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (

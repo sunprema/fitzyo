@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import SignInOutButton from '@/app/components/signInOut';
+import SignInOutButton from '@/components/signInOut';
 
 const StylersSection = () => {
   return (
@@ -90,64 +90,34 @@ const StylersSection = () => {
 
 export default function Home() {
   return (
-    <div>
-      <header className="relative inset-x-0 top-0 z-10 shadow-md">
-        <nav className=" container mx-auto flex items-center justify-between py-6 align-middle">
-          <Link
-            href="/"
-            className="font-sans text-xl font-bold tracking-wide subpixel-antialiased hover:font-extrabold"
-          >
-            <span className={'text-2xl'}>&#129434;&nbsp;</span>
-            Fitzyo
-          </Link>
+    <main>
 
-          <Link className=" hover:text-green-400" href="/aboutUs">
-            Business Partners
-          </Link>
-
-          <Link className=" hover:text-green-400" href="/aboutUs">
-            Services
-          </Link>
-
-          <Link className=" hover:text-green-400" href="/aboutUs">
-            About us
-          </Link>
-
-          <SignInOutButton />
-        </nav>
-      </header>
-      <section className="mx-auto my-12 px-6 py-20 text-center">
-        <h2 className="scroll-m-20 pb-2 text-3xl font-semibold tracking-tight transition-colors first:mt-0">
+      <section className="container mx-auto m-16">    
+          <h2 className="scroll-m-20 pb-2 text-3xl font-semibold tracking-tight  first:mt-0">
           Measure once, buy anywhere.
-        </h2>
-        <h3 className={'mb-4 font-medium'}>
-          Fitzyo is your fashion assistant, <span> perfected!</span>.
-        </h3>
-        <p className={'mx-auto my-8 w-8/12 text-center font-medium text-green-600'}>
-          <span className={'mb-4'}>
-            Fitzyo helps in finding stuff that just fits you, using your Retail passport issued at
-            our partners location.
-          </span>
-        </p>
-        <p className={'mx-auto mb-4 w-8/12 text-center font-medium text-green-600'}>
+          </h2>
+          <h4 className="scroll-m-20 pb-2 text-md font-light tracking-tight  first:mt-0">
+          Fitzyo helps in finding stuff that just fits you, using your Retail passport issued at our partners location.
+          </h4>
+          <p className={'mx-auto mb-4 w-8/12 text-center font-medium text-green-600'}>
           <span>Sign up!,</span>
           <span className="font-semibold"> Get your Retail Passport,</span>
           <span> Shop with our AI Stylers.</span>
         </p>
       </section>
-
+     
       {/* Retail passport */}
-      <section className="container mx-auto my-6 bg-green-100">
+      <section className="container mx-auto my-6 ">
         <div className={'r px-6 py-20 text-neutral-800'}>
-          <h1 className={'mb-6 text-2xl font-bold'}>What is Retail Passport?</h1>
-          <h3 className={'mb-4 font-medium'}>
+          <h1 className={'mb-6 text-2xl font-light'}>What is a Retail Passport?</h1>
+          <h3 className={'mb-4 font-light'}>
             Retail Passport is an online card that will hold your measurements securely. You need to
             schedule a visit to one of our authorized partners location and a professional will take
             the measurement. You can get it for everyone in the family. You can attach retail
             passports to your profile.
           </h3>
 
-          <p className={'mt-4 font-medium'}>
+          <p className={'mt-4 font-light'}>
             When you want to shop in Fitzyo, you will select a Retail passport, magically,
             everything you browse in our site will fit your size. This can be used at our partners
             websites too after you authorize them to use the passport for the logged in session.
@@ -165,6 +135,7 @@ export default function Home() {
       </section>
 
       {/* Stylers  */}
+      {/*
       <section className="container mx-auto mt-12 bg-neutral-50">
         <div className={'r px-6 py-20 text-neutral-800'}>
           <h1 className={'mb-6 text-center text-2xl font-bold'}>Meet our AI Stylers.</h1>
@@ -182,6 +153,7 @@ export default function Home() {
 
         <StylersSection />
       </section>
-    </div>
+      */}
+    </main>
   );
 }
