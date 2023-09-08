@@ -40,7 +40,7 @@ const alphaSizes = ["X", "XS", "M", "L", "XL" , "XXL"]
 
     return (
     
-    <Card className="w-[350px]">
+    <Card className="group w-[350px] shadow-2xl border-orange-500 dark:shadow-orange-400 dark:border-orange-500 hover:border-orange-500 hover:shadow-orange-400">
       
       <CardHeader>
         <Link href={`/useRetailPassport/${userRetailPassport.id}`}> 

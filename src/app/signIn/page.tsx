@@ -80,15 +80,8 @@ const SignInPage = () => {
               },
             }}
           />
-        ) : (
-          <div>
-            <div>Logged in!</div>
-            <button onClick={() => supabase.auth.signOut()}>Sign out</button>
-            <p>
-              <pre>{JSON.stringify(session, null, 2)}</pre>
-            </p>
-          </div>
-        )}
+        ) : null
+      }
       </div>
     </div>
   );
