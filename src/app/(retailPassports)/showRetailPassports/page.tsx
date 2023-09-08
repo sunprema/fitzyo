@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { ChevronDown, Gem, Import, User, User2 } from 'lucide-react';
+import Image from 'next/image';
 
 import { Database } from '@/types/supabase';
 import { Button } from '@/components/ui/button';
@@ -96,20 +97,27 @@ const RetailPassports = async () => {
           </DropdownMenu>
         </div>
         <div>
+          {retailPassports?.length  && retailPassports.length > 0 
+          ?
           <div  className={'mt-16 flex flex-wrap gap-8'}>
-                
-            {retailPassports?.map( 
+          {retailPassports?.map( 
               (retailPassport) =>
               
               <RetailPassportCard 
                 key={retailPassport.id}
                 userRetailPassport={retailPassport} />
             )
-            }
-                
-            </div>
-              
-          
+          }
+          </div>
+          :
+          <div className="container mx-auto mt-20 w-[800px]">
+          <h4> No retail passorts</h4>  
+          <Image src="./images/add_retail_passport.svg"
+           alt="Add Retail passport" 
+           width={600} height={400} />
+          </div> 
+          }
+
           
         </div>
       </div>
