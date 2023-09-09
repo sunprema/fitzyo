@@ -1,34 +1,23 @@
 import Link from 'next/link';
-import { Toaster } from '@/components/ui/toaster';
 import BackButton from '@/components/backButton';
+import { Gem } from 'lucide-react';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <div className={'w-full'}>
-      {/* Sign In Header */}
-      <nav className={'items-center  py-6 shadow-md'}>
-        <div className={'container mx-auto flex justify-between gap-3'}>
-          <BackButton />
-
-          <h4 className={'font-semibold'}> Retail Passports</h4>
-          <Link
-            href="/"
-            className="font-sans text-xl font-bold tracking-wide subpixel-antialiased hover:font-extrabold"
-          >
-            {' '}
-            <span className={'text-2xl'}>&#129434;</span> Fitzyo
+    <div className={"w-full"}>
+        {/*Header */}
+        <nav className="items-center  py-6 shadow-md">
+          <div className="container mx-auto flex justify-between gap-3">
+            <BackButton />
+            <h4 className="font-semibold"> Retail Passport</h4>
+          <Link href="/">
+          <div className="flex gap-2"><Gem className="h-6 w-6" /> 
+            <h4 className="font-sans text-xl font-bold tracking-wide subpixel-antialiased hover:font-extrabold">Fitzyo</h4>
+          </div>
           </Link>
-        </div>
-      </nav>
-
-      <div className="flex flex-1 flex-col">
-        <div className="container mx-auto flex flex-1 justify-center overflow-y-auto px-4">{children}</div>
-      <Toaster />
+          </div>
+        </nav>
+        {children}
       </div>
-
-      
-
-      
-    </div>
   );
 }

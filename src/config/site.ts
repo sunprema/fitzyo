@@ -6,6 +6,10 @@ export const siteConfig = {
     "Measure once, buy anywhere.",
   mainNav: [
     {
+      title: "Retail Passport",
+      href: "/showRetailPassports",
+    },
+    {
       title: "Business Partners",
       href: "/businessPartners",
     },
