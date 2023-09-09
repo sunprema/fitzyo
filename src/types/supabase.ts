@@ -206,58 +206,27 @@ export interface Database {
         }
         Relationships: []
       }
-      partner_brands: {
-        Row: {
-          brand_id: number | null
-          created_at: string
-          id: number
-          partner_id: number | null
-        }
-        Insert: {
-          brand_id?: number | null
-          created_at?: string
-          id?: number
-          partner_id?: number | null
-        }
-        Update: {
-          brand_id?: number | null
-          created_at?: string
-          id?: number
-          partner_id?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "partner_brands_brand_id_fkey"
-            columns: ["brand_id"]
-            referencedRelation: "brands"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "partner_brands_partner_id_fkey"
-            columns: ["partner_id"]
-            referencedRelation: "partners"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
       partners: {
         Row: {
           created_at: string
-          id: number
+          partner_id: string
           partner_name: string
-          website: string | null
+          partner_target_url: string
+          website: string
         }
         Insert: {
           created_at?: string
-          id?: number
+          partner_id?: string
           partner_name: string
-          website?: string | null
+          partner_target_url: string
+          website: string
         }
         Update: {
           created_at?: string
-          id?: number
+          partner_id?: string
           partner_name?: string
-          website?: string | null
+          partner_target_url?: string
+          website?: string
         }
         Relationships: []
       }
