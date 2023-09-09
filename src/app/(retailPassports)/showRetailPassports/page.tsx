@@ -17,6 +17,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import RetailPassportCard from './retailPassport';
 import BackButton from '@/components/backButton';
+import { redirect } from 'next/navigation';
+import { RedirectType } from 'next/dist/client/components/redirect';
 
 const RetailPassports = async () => {
   const supabase = createServerComponentClient<Database>({
@@ -27,6 +29,10 @@ const RetailPassports = async () => {
   } = await supabase.auth.getSession();
 
   let retailPassports = null ;
+
+  if(session == null ){
+    redirect("/signIn", RedirectType.push);
+  }
 
   if( session?.user ){
     const { data: USER_RETAIL_PASSPORTS, error }= await supabase
@@ -39,8 +45,9 @@ const RetailPassports = async () => {
     }else{
       console.log(error)
     }
-    
   }
+
+
   
   console.log(JSON.stringify(session, null, 2));
 
@@ -111,8 +118,8 @@ const RetailPassports = async () => {
           </div>
           :
           <div className="container mx-auto mt-20 w-[800px]">
-          <h4> No retail passorts</h4>  
-          <Image src="./images/add_retail_passport.svg"
+          <h4 className="px-12 pb-12 text-lg font-medium">No Retail passports. Add one by using the button above.</h4>  
+          <Image src="./images/welcome_cats.svg"
            alt="Add Retail passport" 
            width={600} height={400} />
           </div> 

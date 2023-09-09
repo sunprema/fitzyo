@@ -27,11 +27,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs"
+import { useRouter } from 'next/navigation';
 
 
 const MenForm = () => {
     const [saving, setSaving] = useState<boolean>(false);
     const {toast} = useToast()
+    const router = useRouter()
   
     const MenFormSchema = z.object({
 
@@ -197,31 +199,26 @@ const MenForm = () => {
     });
   
     async function onSubmit(data: z.infer<typeof MenFormSchema>) {
+      setSaving(true);
       try{
         const response = await axios.post("/api/addRetailPassport", data)
 
         toast({
           title: "Retail passport added",
-          description: JSON.stringify(response.data, null, 2),
-              
+          description: "Retail passport added successfully",
         })
+        router.push("/showRetailPassports")
 
       }catch(error){
         toast({
-          title: "Retail passport addition failed",
-          description: "Errror ",
+          title: "Retail passport failed",
+          description: `Error : ${error}`,
           variant:"destructive",
-              
       })
 
       }
-      console.log(data)
-      
-      setSaving(true);
-      console.log(JSON.stringify(data, null, 2));
-      await sleep(3000);
-      
       setSaving(false);
+      
       
     }
   
@@ -231,6 +228,7 @@ const MenForm = () => {
           <h1 className={'text-xl font-semibold leading-tight tracking-tighter md:text-2xl'}>
             Add new Retail passport for Men.
           </h1>
+          <div className="max-w-[800px]">
           <Form {...menForm}>
             <form onSubmit={menForm.handleSubmit(onSubmit)}>
 
@@ -246,7 +244,7 @@ const MenForm = () => {
                         <Input  {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                      should be between 3 and 30 characters.
                     </FormDescription>
                     <FormMessage />
@@ -254,7 +252,7 @@ const MenForm = () => {
                 )}
               />
 
-            <Tabs defaultValue="shirt" className="w-full mt-16">
+            <Tabs defaultValue="shirt" className="mt-16 w-full">
               <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="shirt">Shirt</TabsTrigger>
                 <TabsTrigger value="pant">Pants</TabsTrigger>
@@ -264,7 +262,7 @@ const MenForm = () => {
               </TabsList>
               
               <TabsContent value="shirt">      
-              <div className={'grid grid-cols-1 md:grid-cols-3 gap-8 m-16 p-8'}>
+              <div className={'m-16 grid grid-cols-1 gap-8 p-8 md:grid-cols-3'}>
             
 
               <FormField
@@ -278,7 +276,7 @@ const MenForm = () => {
                         <Input  {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                      should be between 12 to 20 inches.
                     </FormDescription>
                     <FormMessage />
@@ -297,7 +295,7 @@ const MenForm = () => {
                         <Input  {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                      Measure around your chest, just under armpit.
                     </FormDescription>
                     <FormMessage />
@@ -315,7 +313,7 @@ const MenForm = () => {
                         <Input  {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                     Measure around waist at the smallest circumference..
                     </FormDescription>
                     <FormMessage />
@@ -333,7 +331,7 @@ const MenForm = () => {
                         <Input  {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                     With elbow bent, measure from the center (back) of neck to elbow and down to wrist.
                     </FormDescription>
                     <FormMessage />
@@ -351,7 +349,7 @@ const MenForm = () => {
                         <Input {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                     should be between 27 to 32 inches.
                     </FormDescription>
                     <FormMessage />
@@ -362,7 +360,7 @@ const MenForm = () => {
               </TabsContent>
 
                <TabsContent value="pant">      
-              <div className={'grid grid-cols-1 md:grid-cols-3 gap-8 m-16 p-8'}>    
+              <div className={'m-16 grid grid-cols-1 gap-8 p-8 md:grid-cols-3'}>    
               <FormField
                 control={menForm.control}
                 name="pant_waist"
@@ -374,7 +372,7 @@ const MenForm = () => {
                         <Input {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                      should be between 28 to 40 inches.
                     </FormDescription>
                     <FormMessage />
@@ -392,7 +390,7 @@ const MenForm = () => {
                         <Input  {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                      Stand, feet together, and measure around the largest circumference at hips.
                     </FormDescription>
                     <FormMessage />
@@ -410,7 +408,7 @@ const MenForm = () => {
                         <Input   {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                     should be between 30 to 34 inches.
                     </FormDescription>
                     <FormMessage />
@@ -428,7 +426,7 @@ const MenForm = () => {
                         <Input  {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                     should be between 32 to 36 inches.
                     </FormDescription>
                     <FormMessage />
@@ -439,7 +437,7 @@ const MenForm = () => {
               </TabsContent>
 
               <TabsContent value="belt">      
-              <div className={'grid grid-cols-1 md:grid-cols-3 gap-8 m-16 p-8'}>
+              <div className={'m-16 grid grid-cols-1 gap-8 p-8 md:grid-cols-3'}>
               <FormField
                 control={menForm.control}
                 name="belt_waist_size"
@@ -451,7 +449,7 @@ const MenForm = () => {
                         <Input  {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                     should be between 28 to 40 inches.
                     </FormDescription>
                     <FormMessage />
@@ -469,7 +467,7 @@ const MenForm = () => {
                         <Input  {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                     should be between 30 to 42 inches.
                     </FormDescription>
                     <FormMessage />
@@ -480,7 +478,7 @@ const MenForm = () => {
               </TabsContent>
 
               <TabsContent value="shoe">      
-              <div className={'grid grid-cols-1 md:grid-cols-3 gap-8 m-16 p-8'}>
+              <div className={'m-16 grid grid-cols-1 gap-8 p-8 md:grid-cols-3'}>
 
               <FormField
                 control={menForm.control}
@@ -493,7 +491,7 @@ const MenForm = () => {
                         <Input  {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                     should be between 8.5 to 12 inches.
                     </FormDescription>
                     <FormMessage />
@@ -512,7 +510,7 @@ const MenForm = () => {
                         <Input  {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                      should be between 3 to 6 inches.
                     </FormDescription>
                     <FormMessage />
@@ -530,7 +528,7 @@ const MenForm = () => {
                         <Input  {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                     should be between 8 to 11 inches.
                     </FormDescription>
                     <FormMessage />
@@ -541,7 +539,7 @@ const MenForm = () => {
               </TabsContent>
 
               <TabsContent value="gloves">      
-              <div className={'grid grid-cols-1 md:grid-cols-3 gap-8 m-16 p-8'}>
+              <div className={'m-16 grid grid-cols-1 gap-8 p-8 md:grid-cols-3'}>
 
               <FormField
                 control={menForm.control}
@@ -554,7 +552,7 @@ const MenForm = () => {
                         <Input  {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic">
                     should be between 7 to 10 inches.
                     </FormDescription>
                     <FormMessage />
@@ -573,7 +571,7 @@ const MenForm = () => {
                         <Input  {...field}></Input>
                       </FormControl>
                     </div>
-                    <FormDescription>
+                    <FormDescription className="text-xs italic"> 
                     should be between 6.5 to 8.5 inches.
                     </FormDescription>
                     <FormMessage />
@@ -592,6 +590,7 @@ const MenForm = () => {
               </div>
             </form>
           </Form>
+          </div>
         </section>
         
       </div>
