@@ -41,3 +41,4 @@ const Page = async ({params}:{ 'params':{'retailPassportId':string}}) => {
 }
 
 export default Page ;
+export const dynamic = 'force-dynamic';

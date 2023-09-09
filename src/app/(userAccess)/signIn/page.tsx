@@ -88,3 +88,4 @@ const SignInPage = () => {
 };
 
 export default SignInPage;
+export const dynamic = 'force-dynamic';
