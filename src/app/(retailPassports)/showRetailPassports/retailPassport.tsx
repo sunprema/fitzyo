@@ -12,6 +12,7 @@ import {
  } from "@/components/ui/card"
 import { Database } from '@/types/supabase';
 import Link from "next/link";
+import { useCallback } from "react";
  
 function getRandomInt(max:number) {
   return Math.floor(Math.random() * max);
@@ -19,13 +20,16 @@ function getRandomInt(max:number) {
 
 const alphaSizes = ["X", "XS", "M", "L", "XL" , "XXL"] 
 
- export default function RetailPassport({ 
+ export default function RetailPassportCard({
+    partner, 
     userRetailPassport 
 }: {
+    partner?:Database['public']['Tables']['partners']['Row']
     userRetailPassport: Database['public']['Tables']['USER_RETAIL_PASSPORTS']['Row']
     }){
 
-    const handleShare = () => {
+    const handleShare = useCallback(() => {
+      const targetOrigin = process.env.NODE_ENV != "production" ? "http://localhost:3001" :  partner?.partner_target_url
       const targetWindow = window.opener
       targetWindow.postMessage(
         {"retailPassportData": 
@@ -35,12 +39,12 @@ const alphaSizes = ["X", "XS", "M", "L", "XL" , "XXL"]
             "numericalSize" : "36"        
           }
         }, 
-        "*"); //todo: fix this
-    }
+        targetOrigin); //todo: fix this
+    },[partner?.partner_target_url, userRetailPassport.nick_name])
 
     return (
     
-    <Card className="group w-[350px] shadow-2xl border-orange-500 dark:shadow-orange-400 dark:border-orange-500 hover:border-orange-500 hover:shadow-orange-400">
+    <Card className="group w-[350px] border-orange-500 shadow-2xl hover:border-orange-500 hover:shadow-orange-400 dark:border-orange-500 dark:shadow-orange-400">
       
       <CardHeader>
         <Link href={`/useRetailPassport/${userRetailPassport.id}`}> 
@@ -53,11 +57,13 @@ const alphaSizes = ["X", "XS", "M", "L", "XL" , "XXL"]
         </CardHeader>
         <CardFooter>
         
+        { 
+        partner &&
         <div className="mt-8">
-        <Button variant="secondary" className={'rounded-xl hover:bg-slate-600'} onClick={handleShare}>
-          Share it with parner</Button>
+        <Button variant="secondary" className={'rounded-xl text-sm hover:bg-slate-600'} onClick={handleShare}>
+          {`Share it with ${partner.partner_name}`} </Button>
         </div>
-          
+        }  
         </CardFooter>
       
       <CardContent>

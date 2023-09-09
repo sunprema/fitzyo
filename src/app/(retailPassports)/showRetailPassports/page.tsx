@@ -20,7 +20,7 @@ import BackButton from '@/components/backButton';
 import { redirect } from 'next/navigation';
 import { RedirectType } from 'next/dist/client/components/redirect';
 
-const RetailPassports = async () => {
+const Page = async () => {
   const supabase = createServerComponentClient<Database>({
     cookies,
   });
@@ -40,7 +40,6 @@ const RetailPassports = async () => {
     .select("*")
 
     if(error == null){
-      console.log(JSON.stringify(USER_RETAIL_PASSPORTS, null, 2))
       retailPassports = USER_RETAIL_PASSPORTS
     }else{
       console.log(error)
@@ -132,4 +131,4 @@ const RetailPassports = async () => {
   );
 };
 export const dynamic = 'force-dynamic';
-export default RetailPassports;
+export default Page;
