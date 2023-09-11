@@ -21,7 +21,7 @@ const SignInOutButton = () => {
 
   if (config.isLoggedIn) {
     button = <Button onClick={handleSignOut}> Sign out</Button>;
-  } else {
+  }else {
     button = (
       <Button asChild>
         <Link href="/signIn">Sign In</Link>
