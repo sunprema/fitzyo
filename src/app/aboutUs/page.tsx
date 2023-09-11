@@ -16,21 +16,6 @@ const AboutUs = () => {
 
   return (
     <>
-      <div className={"w-full"}>
-        {/*Header */}
-        <nav className="items-center  py-6 shadow-md">
-          <div className="container mx-auto flex justify-between gap-3">
-            <BackButton />
-            <h4 className="font-semibold"> About us</h4>
-          <Link href="/">
-          <div className="flex gap-2"><Gem className="h-6 w-6" /> 
-            <h4 className="font-sans text-xl font-bold tracking-wide subpixel-antialiased hover:font-extrabold">Fitzyo</h4>
-          </div>
-          </Link>
-          </div>
-        </nav>
-      </div>
-
       <div className={"container mx-auto"}>
         <div className="mt-20 py-6">
           <h1 className="border-b-2 border-orange-500 pb-4 text-2xl font-bold">Mission</h1>
@@ -110,11 +95,11 @@ const AboutUs = () => {
           </blockquote>
 
             
-            <h1 className="text-lg font-medium italic px-12 pb-12">
+            <h1 className="text-lg font-light italic px-12 pb-12">
               While you are reading this,
               <span
                 className={
-                  'mx-2 inline-block w-40 bg-red-500 p-2 text-center  text-3xl font-extrabold text-white'
+                  'mx-2 inline-block w-40 bg-yellow-200 p-2 text-center  text-2xl font-extrabold text-black'
                 }
               >
                 {seconds}
@@ -127,12 +112,12 @@ const AboutUs = () => {
           <div>
           <h1 className="border-b-2 border-orange-500 pb-4 text-2xl font-semibold">Fitzyo wants to fix this.</h1>
             
-            <h1 className={'mb-2 px-12 py-6 text-lg font-medium'}>
+            <h1 className={'mb-2 px-12 py-6 text-lg font-medium italic'}>
               Much of the challenges are due to the prevailing shopping experience , where customers
               are left to deal with sizing ambiguities.
             </h1>
             <h1 className={'mb-2 px-12 text-lg font-medium'}>
-              With Fitzyo&apos;s &quot;Retail Passport&quot; and the &quot;AI Stylers&quot;, users
+              With Fitzyo&apos;s &quot;Retail Passport&quot;  users
               can say goodbye to the guesswork and frequent returns while saving Environment and
               Retailers!.
             </h1>

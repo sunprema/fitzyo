@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Auth } from '@supabase/auth-ui-react';
@@ -8,7 +8,7 @@ import {
   // Import predefined theme
   ThemeSupa,
 } from '@supabase/auth-ui-shared';
-import type { Session } from '@supabase/supabase-js';
+
 
 import { useConfig } from '@/components/configContext';
 import BackButton from '@/components/backButton';
@@ -16,29 +16,38 @@ import BackButton from '@/components/backButton';
 //const supabase = createClientComponentClient()
 
 const SignInPage = () => {
-  const [session, setSession] = useState<Session | null>(null);
+  
   const router = useRouter();
   const config = useConfig();
   const supabase = config.supabase;
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      config.setIsLoggedIn(true);
+      if (session != null){
+        config.setIsLoggedIn(true);
+        router.push("/showRetailPassports")
+      }
+
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+      if (_event === "SIGNED_OUT"){
+        config.setIsLoggedIn(false)
+      }
+      if (_event === "SIGNED_IN"){
+        if (session != null){
+        config.setIsLoggedIn(true);
+        router.push("/showRetailPassports")
+        }
+      }
     });
 
     return () => subscription.unsubscribe();
-  }, [config, supabase]);
+  }, [config, supabase, router]);
 
-  if (session != null) {
-    router.replace('/showRetailPassports');
-  }
+  
   return (
     <div className={'w-full'}>
       {/* Sign In Header */}
@@ -59,7 +68,7 @@ const SignInPage = () => {
 
       {/* Auth Section */}
       <div className="container mx-auto my-10 max-w-md">
-        {session === null ? (
+        {!config.isLoggedIn ? (
           <Auth
             supabaseClient={supabase}
             providers={[]}
