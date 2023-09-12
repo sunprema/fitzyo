@@ -13,6 +13,7 @@ import {
 import { Database } from '@/types/supabase';
 import Link from "next/link";
 import { useCallback } from "react";
+import { useToast } from "./ui/use-toast";
  
 function getRandomInt(max:number) {
   return Math.floor(Math.random() * max);
@@ -27,7 +28,9 @@ const alphaSizes = ["X", "XS", "M", "L", "XL" , "XXL"]
     partner?:Database['public']['Tables']['partners']['Row']
     userRetailPassport: Database['public']['Tables']['USER_RETAIL_PASSPORTS']['Row']
     }){
-
+    
+    const {toast}  = useToast()
+    
     const handleShare = useCallback(() => {
       const targetOrigin = process.env.NODE_ENV != "production" ? "http://localhost:3001" :  partner?.partner_target_url
       const targetWindow = window.opener
@@ -39,8 +42,14 @@ const alphaSizes = ["X", "XS", "M", "L", "XL" , "XXL"]
             "numericalSize" : "36"        
           }
         }, 
-        targetOrigin); //todo: fix this
-    },[partner?.partner_target_url, userRetailPassport.nick_name])
+        targetOrigin);
+        toast({
+          title: "Please go back to the partner website",
+          description: `Your retail passport is shared with ${partner?.partner_name}`,
+              
+      })  
+
+    },[partner?.partner_target_url, userRetailPassport.nick_name, toast, partner?.partner_name])
 
     return (
     

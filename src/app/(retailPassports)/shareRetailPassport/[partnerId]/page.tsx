@@ -4,7 +4,7 @@ import { Database } from '@/types/supabase'
 import Image from 'next/image'
 import { redirect } from 'next/navigation';
 import { RedirectType } from 'next/dist/client/components/redirect';
-import RetailPassport from '../../showRetailPassports/retailPassport';
+import RetailPassport from '../../../../components/retailPassport';
 
 
 
