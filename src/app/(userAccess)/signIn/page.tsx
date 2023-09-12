@@ -4,7 +4,6 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Auth } from '@supabase/auth-ui-react';
 import {
-  // Import predefined theme
   ThemeSupa,
 } from '@supabase/auth-ui-shared';
 
