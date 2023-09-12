@@ -15,7 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import RetailPassportCard from './retailPassport';
+import RetailPassportCard from '../../../components/retailPassport';
 import BackButton from '@/components/backButton';
 import { redirect } from 'next/navigation';
 import { RedirectType } from 'next/dist/client/components/redirect';
