@@ -169,7 +169,7 @@ const MenFormSchema = z.object({
 });
 
 
-const MenForm = ( {defaultValues}:{defaultValues?:z.infer<typeof MenFormSchema>|null} ) => {
+const MenForm = ( {defaultValues}:{defaultValues?:any} ) => {
     const [saving, setSaving] = useState<boolean>(false);
     const {toast} = useToast()
     const router = useRouter()

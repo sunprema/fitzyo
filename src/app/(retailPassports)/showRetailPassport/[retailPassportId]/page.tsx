@@ -2,8 +2,7 @@ import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers'
 import { Database } from '@/types/supabase'
 import MenForm, { MenFormSchema } from '../../addRetailPassport/[mode]/menRetailPassport';
-import { Suspense } from 'react';
-import LoadingSkeleton from './loading';
+import * as z from 'zod';
 
 
 const ShowRetailPassportPage = async ({params}:{ 'params':{'retailPassportId':string}}) => {
@@ -15,8 +14,8 @@ const ShowRetailPassportPage = async ({params}:{ 'params':{'retailPassportId':st
         data: { session },
       } = await supabase.auth.getSession();
 
-    let defaultValues:z.infer<typeof MenFormSchema> = null  
-    
+    let defaultValues  = null 
+
     if (!session){
         return null;
     }
@@ -42,8 +41,8 @@ const ShowRetailPassportPage = async ({params}:{ 'params':{'retailPassportId':st
                     console.log(error)
                 }
                 if(data){
-                    defaultValues = data[0]
-                    defaultValues['nick_name']= nick_name
+                    defaultValues = { "nick_name" : nick_name ?? "", ...data[0]}
+                    
                     console.log({defaultValues})
                 }
             }
