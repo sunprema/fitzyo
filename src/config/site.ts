@@ -13,11 +13,7 @@ export const siteConfig = {
       title: "Business Partners",
       href: "/businessPartners",
     },
-
-    {
-      title: "Services",
-      href: "/services",
-    },
+    
     {
       title: "About us",
       href: "/aboutUs",
