@@ -29,154 +29,154 @@ import {
 } from "@/components/ui/tabs"
 import { useRouter } from 'next/navigation';
 
+const MenFormSchema = z.object({
 
-const MenForm = () => {
+  nick_name:z
+  .string({required_error :'Nick name is required'})
+  .min(3,{message: 'Minimum of three characters'})
+  .max(30, {message: 'Max of 30 characters'}),
+  
+  
+  shirt_neck:z
+  .coerce
+  .number({required_error: 'Neck size is required'})
+  .gt(11,{message: 'Should be greater than 11'})
+  .lt(20,{message: 'Should be less than 20'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'})
+  .default(15),
+
+  shirt_chest:z
+  .coerce
+  .number({required_error: 'Chest size is required'})
+  .gt(30,{message: 'Should be greater than 30'})
+  .lt(60,{message: 'Should be less than 60'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'}),
+
+  shirt_waist:z
+  .coerce
+  .number({required_error: 'Waist size is required'})
+  .gt(28,{message: 'Should be greater than 28'})
+  .lt(55,{message: 'Should be less than 55'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'}),
+
+  shirt_sleeve_length:z
+  .coerce
+  .number({required_error: 'Sleeve legth is required'})
+  .gt(30,{message: 'Should be greater than 30'})
+  .lt(40,{message: 'Should be less than 40'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'}),
+
+  shirt_length:z
+  .coerce
+  .number({required_error: 'Shirt legth is required'})
+  .gt(27,{message: 'Should be greater than 27'})
+  .lt(32,{message: 'Should be less than 32'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'}),
+
+  pant_waist:z
+  .coerce
+  .number({required_error: 'Waist size for pant is required'})
+  .gt(28,{message: 'Should be greater than 28'})
+  .lt(40,{message: 'Should be less than 40'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'}),
+
+  pant_hips:z
+  .coerce
+  .number({required_error: 'Hip size for pant is required'})
+  .gt(36,{message: 'Should be greater than 36'})
+  .lt(48,{message: 'Should be less than 48'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'}),
+
+  pant_inseam:z
+  .coerce
+  .number({required_error: 'Inseam for pant is required'})
+  .gt(30,{message: 'Should be greater than 30'})
+  .lt(34,{message: 'Should be less than 34'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'}),
+
+  pant_outseam:z
+  .coerce
+  .number({required_error: 'Outseam for pant is required'})
+  .gt(32,{message: 'Should be greater than 32'})
+  .lt(36,{message: 'Should be less than 36'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'}),
+
+  belt_waist_size:z
+  .coerce
+  .number({required_error: 'Belt waist size is required'})
+  .gt(28,{message: 'Should be greater than 28'})
+  .lt(40,{message: 'Should be less than 40'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'}),
+
+  belt_length:z
+  .coerce
+  .number({required_error: 'Belt length is required'})
+  .gt(30,{message: 'Should be greater than 30'})
+  .lt(42,{message: 'Should be less than 42'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'}),
+
+  shoe_foot_length:z
+  .coerce
+  .number({required_error: 'Foot length for shoe is required'})
+  .gt(8.5,{message: 'Should be greater than 8.5'})
+  .lt(12,{message: 'Should be less than 12'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'}),
+
+  shoe_foot_width:z
+  .coerce
+  .number({required_error: 'Foot width for shoe is required'})
+  .gt(3,{message: 'Should be greater than 3'})
+  .lt(6,{message: 'Should be less than 6'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'}),
+
+  shoe_arch_length:z
+  .coerce
+  .number({required_error: 'Foot arch length for shoe is required'})
+  .gt(8,{message: 'Should be greater than 8'})
+  .lt(11,{message: 'Should be less than 11'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'}),
+
+  glove_hand_circumference:z
+  .coerce
+  .number({required_error: 'Glove hand circumference is required'})
+  .gt(7,{message: 'Should be greater than 7'})
+  .lt(10,{message: 'Should be less than 10'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'}),
+
+  glove_hand_length:z
+  .coerce
+  .number({required_error: 'Foot arch length for shoe is required'})
+  .gt(6.5,{message: 'Should be greater than 8'})
+  .lt(8.5,{message: 'Should be less than 11'})
+  .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
+  .positive({message : 'Number should be positive'}),
+
+});
+
+
+const MenForm = ( {defaultValues}:{defaultValues?:z.infer<typeof MenFormSchema>|null} ) => {
     const [saving, setSaving] = useState<boolean>(false);
     const {toast} = useToast()
     const router = useRouter()
   
-    const MenFormSchema = z.object({
-
-      nick_name:z
-      .string({required_error :'Nick name is required'})
-      .min(3,{message: 'Minimum of three characters'})
-      .max(30, {message: 'Max of 30 characters'}),
-      
-      
-      shirt_neck:z
-      .coerce
-      .number({required_error: 'Neck size is required'})
-      .gt(11,{message: 'Should be greater than 11'})
-      .lt(20,{message: 'Should be less than 20'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'})
-      .default(15),
-
-      shirt_chest:z
-      .coerce
-      .number({required_error: 'Chest size is required'})
-      .gt(30,{message: 'Should be greater than 30'})
-      .lt(60,{message: 'Should be less than 60'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
-
-      shirt_waist:z
-      .coerce
-      .number({required_error: 'Waist size is required'})
-      .gt(28,{message: 'Should be greater than 28'})
-      .lt(55,{message: 'Should be less than 55'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
-
-      shirt_sleeve_length:z
-      .coerce
-      .number({required_error: 'Sleeve legth is required'})
-      .gt(30,{message: 'Should be greater than 30'})
-      .lt(40,{message: 'Should be less than 40'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
-
-      shirt_length:z
-      .coerce
-      .number({required_error: 'Shirt legth is required'})
-      .gt(27,{message: 'Should be greater than 27'})
-      .lt(32,{message: 'Should be less than 32'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
-
-      pant_waist:z
-      .coerce
-      .number({required_error: 'Waist size for pant is required'})
-      .gt(28,{message: 'Should be greater than 28'})
-      .lt(40,{message: 'Should be less than 40'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
-
-      pant_hips:z
-      .coerce
-      .number({required_error: 'Hip size for pant is required'})
-      .gt(36,{message: 'Should be greater than 36'})
-      .lt(48,{message: 'Should be less than 48'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
-
-      pant_inseam:z
-      .coerce
-      .number({required_error: 'Inseam for pant is required'})
-      .gt(30,{message: 'Should be greater than 30'})
-      .lt(34,{message: 'Should be less than 34'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
-
-      pant_outseam:z
-      .coerce
-      .number({required_error: 'Outseam for pant is required'})
-      .gt(32,{message: 'Should be greater than 32'})
-      .lt(36,{message: 'Should be less than 36'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
-
-      belt_waist_size:z
-      .coerce
-      .number({required_error: 'Belt waist size is required'})
-      .gt(28,{message: 'Should be greater than 28'})
-      .lt(40,{message: 'Should be less than 40'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
-
-      belt_length:z
-      .coerce
-      .number({required_error: 'Belt length is required'})
-      .gt(30,{message: 'Should be greater than 30'})
-      .lt(42,{message: 'Should be less than 42'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
-
-      shoe_foot_length:z
-      .coerce
-      .number({required_error: 'Foot length for shoe is required'})
-      .gt(8.5,{message: 'Should be greater than 8.5'})
-      .lt(12,{message: 'Should be less than 12'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
-
-      shoe_foot_width:z
-      .coerce
-      .number({required_error: 'Foot width for shoe is required'})
-      .gt(3,{message: 'Should be greater than 3'})
-      .lt(6,{message: 'Should be less than 6'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
-
-      shoe_arch_length:z
-      .coerce
-      .number({required_error: 'Foot arch length for shoe is required'})
-      .gt(8,{message: 'Should be greater than 8'})
-      .lt(11,{message: 'Should be less than 11'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
-
-      glove_hand_circumference:z
-      .coerce
-      .number({required_error: 'Glove hand circumference is required'})
-      .gt(7,{message: 'Should be greater than 7'})
-      .lt(10,{message: 'Should be less than 10'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
-
-      glove_hand_length:z
-      .coerce
-      .number({required_error: 'Foot arch length for shoe is required'})
-      .gt(6.5,{message: 'Should be greater than 8'})
-      .lt(8.5,{message: 'Should be less than 11'})
-      .multipleOf(0.5, {message: 'Should be in the multiples of 1/2 inch'})
-      .positive({message : 'Number should be positive'}),
-
-    });
-  
     const menForm = useForm<z.infer<typeof MenFormSchema>>({
       resolver: zodResolver(MenFormSchema),
-      defaultValues:{
+      defaultValues:defaultValues ?? {
         nick_name: 'John Doe',
         shirt_neck: 15,
         shirt_chest: 40,
@@ -225,9 +225,7 @@ const MenForm = () => {
     return (
       <div className={'flex flex-col items-center'}>
         <section className={'my-8 flex w-full flex-col items-center'}>
-          <h1 className={'text-xl font-semibold leading-tight tracking-tighter md:text-2xl'}>
-            Add new Retail passport for Men.
-          </h1>
+          
           <div className="max-w-[800px]">
           <Form {...menForm}>
             <form onSubmit={menForm.handleSubmit(onSubmit)}>
@@ -599,3 +597,4 @@ const MenForm = () => {
 
 
   export default MenForm;
+  export {MenFormSchema}

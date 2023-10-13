@@ -5,6 +5,7 @@ const Page = () => {
     return (
     <>
     <section className="block">
+    <h4 className="text-2xl font-bold"></h4>    
     <div className="px-10 max-[767px]:px-5">
         <div className="mx-auto w-full max-w-7xl">
             <div className="py-32 max-[991px]:py-24 max-[767px]:py-16">
@@ -17,54 +18,54 @@ const Page = () => {
                             
                             <div className="p-4 px-0 pt-0 max-[991px]:px-0 max-[991px]:pt-0 max-[767px]:px-0 max-[767px]:pt-0 max-[479px]:px-0 max-[479px]:pt-0">
                             </div>
-                            <div className="font-semibold">Support</div>
+                            <div className="font-semibold">Join</div>
                             <div className="p-4 px-0 pt-0 max-[991px]:px-0 max-[991px]:pt-0 max-[767px]:px-0 max-[767px]:pt-0 max-[479px]:px-0 max-[479px]:pt-0">
                             </div>
-                            <div className="text-sm text-[#636262] max-[479px]:text-[0.8rem]">Lorem ipsum dolor sit amet consectetur adipiscing elit ut aliquam, purus sit.</div>
+                            <div className="text-sm text-[#636262] max-[479px]:text-[0.8rem]">Join as a retail partner to use Fitzyo services.</div>
                         </div>
                         <div className="flex auto-cols-[1fr] grid-cols-[1fr] grid-rows-[auto_auto_auto] flex-col bg-white p-0 max-[767px]:p-8">
                             
                             <div className="p-4 px-0 pt-0 max-[991px]:px-0 max-[991px]:pt-0 max-[767px]:px-0 max-[767px]:pt-0 max-[479px]:px-0 max-[479px]:pt-0">
                             </div>
-                            <div className="font-semibold">Organise</div>
+                            <div className="font-semibold">Manage</div>
                             <div className="p-4 px-0 pt-0 max-[991px]:px-0 max-[991px]:pt-0 max-[767px]:px-0 max-[767px]:pt-0 max-[479px]:px-0 max-[479px]:pt-0">
                             </div>
-                            <div className="text-sm text-[#636262] max-[479px]:text-[0.8rem]">Lorem ipsum dolor sit amet consectetur adipiscing elit ut aliquam, purus sit.</div>
+                            <div className="text-sm text-[#636262] max-[479px]:text-[0.8rem]">Add retail locations where customers can get their measurements taken</div>
                         </div>
                         <div className="flex auto-cols-[1fr] grid-cols-[1fr] grid-rows-[auto_auto_auto] flex-col bg-white p-0 max-[767px]:p-8">
                             
                             <div className="p-4 px-0 pt-0 max-[991px]:px-0 max-[991px]:pt-0 max-[767px]:px-0 max-[767px]:pt-0 max-[479px]:px-0 max-[479px]:pt-0">
                             </div>
-                            <div className="font-semibold">Flexibility</div>
+                            <div className="font-semibold">Advertise</div>
                             <div className="p-4 px-0 pt-0 max-[991px]:px-0 max-[991px]:pt-0 max-[767px]:px-0 max-[767px]:pt-0 max-[479px]:px-0 max-[479px]:pt-0">
                             </div>
-                            <div className="text-sm text-[#636262] max-[479px]:text-[0.8rem]">Lorem ipsum dolor sit amet consectetur adipiscing elit ut aliquam, purus sit.</div>
+                            <div className="text-sm text-[#636262] max-[479px]:text-[0.8rem]">Advertise in Fitzyo to reach customers with Fitzyo profiles.</div>
                         </div>
                         <div className="flex auto-cols-[1fr] grid-cols-[1fr] grid-rows-[auto_auto_auto] flex-col bg-white p-0 max-[767px]:p-8">
                             
                             <div className="p-4 px-0 pt-0 max-[991px]:px-0 max-[991px]:pt-0 max-[767px]:px-0 max-[767px]:pt-0 max-[479px]:px-0 max-[479px]:pt-0">
                             </div>
-                            <div className="font-semibold">Speed</div>
+                            <div className="font-semibold">Integrate</div>
                             <div className="p-4 px-0 pt-0 max-[991px]:px-0 max-[991px]:pt-0 max-[767px]:px-0 max-[767px]:pt-0 max-[479px]:px-0 max-[479px]:pt-0">
                             </div>
-                            <div className="text-sm text-[#636262] max-[479px]:text-[0.8rem]">Lorem ipsum dolor sit amet consectetur adipiscing elit ut aliquam, purus sit.</div>
+                            <div className="text-sm text-[#636262] max-[479px]:text-[0.8rem]">Integrate Fitzyo services with your shopping platform.</div>
                         </div>
                         <div className="flex auto-cols-[1fr] grid-cols-[1fr] grid-rows-[auto_auto_auto] flex-col bg-white p-0 max-[767px]:p-8">
                             
                             <div className="p-4 px-0 pt-0 max-[991px]:px-0 max-[991px]:pt-0 max-[767px]:px-0 max-[767px]:pt-0 max-[479px]:px-0 max-[479px]:pt-0">
                             </div>
-                            <div className="font-semibold">Quality</div>
+                            <div className="font-semibold">Consulting</div>
                             <div className="p-4 px-0 pt-0 max-[991px]:px-0 max-[991px]:pt-0 max-[767px]:px-0 max-[767px]:pt-0 max-[479px]:px-0 max-[479px]:pt-0">
                             </div>
-                            <div className="text-sm text-[#636262] max-[479px]:text-[0.8rem]">Lorem ipsum dolor sit amet consectetur adipiscing elit ut aliquam, purus sit.</div>
+                            <div className="text-sm text-[#636262] max-[479px]:text-[0.8rem]">We provide business consultants & developers for integrating your platform with Fitzyo.</div>
                         </div>
                         <div className="flex auto-cols-[1fr] grid-cols-[1fr] grid-rows-[auto_auto_auto] flex-col bg-white p-0 max-[767px]:p-8">
                             <div className="p-4 px-0 pt-0 max-[991px]:px-0 max-[991px]:pt-0 max-[767px]:px-0 max-[767px]:pt-0 max-[479px]:px-0 max-[479px]:pt-0">
                             </div>
-                            <div className="font-semibold">Resource</div>
+                            <div className="font-semibold">Monitor</div>
                             <div className="p-4 px-0 pt-0 max-[991px]:px-0 max-[991px]:pt-0 max-[767px]:px-0 max-[767px]:pt-0 max-[479px]:px-0 max-[479px]:pt-0">
                             </div>
-                            <div className="text-sm text-[#636262] max-[479px]:text-[0.8rem]">Lorem ipsum dolor sit amet consectetur adipiscing elit ut aliquam, purus sit.</div>
+                            <div className="text-sm text-[#636262] max-[479px]:text-[0.8rem]">You can see how Fitzyo customers are using your platform</div>
                         </div>
                     </div>
                 </div>

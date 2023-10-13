@@ -1,3 +1,4 @@
+import { ReactNode } from 'react';
 import ImportForm from './importRetailPassport';
 import MenForm from './menRetailPassport';
 
@@ -6,19 +7,33 @@ const WomenForm = () => {
 };
 
 const Page = ({ params }: { params: { mode: string } }) => {
+  let form:ReactNode = null
   switch (params.mode) {
     case 'men':
-      return <MenForm />
-
+      form = <MenForm />
+      break
     case 'women':
-      return <WomenForm />;
-
+      form =  <WomenForm />;
+      break
     case 'import':
-      return <ImportForm />;
-
+      form = <ImportForm />;
+      break
     default:
-      return <h1> Mode {params.mode} not valid</h1>;
+      form = <h1> Mode {params.mode} not valid</h1>;
   }
+  return (
+    <div>
+      <section className={'my-8 flex w-full flex-col items-center'}>
+          <h1 className={'text-xl font-semibold leading-tight tracking-tighter md:text-2xl'}>
+            Add new Retail passport for Men.
+          </h1>
+          {form}
+      </section>    
+
+    </div>
+
+  )
+
 };
 
 export default Page;

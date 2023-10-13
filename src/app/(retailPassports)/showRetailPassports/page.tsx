@@ -19,6 +19,7 @@ import RetailPassportCard from '../../../components/retailPassport';
 import BackButton from '@/components/backButton';
 import { redirect } from 'next/navigation';
 import { RedirectType } from 'next/dist/client/components/redirect';
+import { Separator } from '@/components/ui/separator';
 
 const Page = async () => {
   const supabase = createServerComponentClient<Database>({
@@ -80,7 +81,7 @@ const Page = async () => {
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <Link href={'/addRetailPassport/import'}>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem disabled>
                     <Import className="mr-2 h-4 w-4" />
                     <span>Import using retail passport id</span>
                   </DropdownMenuItem>
@@ -93,7 +94,7 @@ const Page = async () => {
                 </Link>
 
                 <Link href={'/addRetailPassport/women'}>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem disabled>
                     <User className="mr-2 h-4 w-4" />
                     <span>Women</span>
                   </DropdownMenuItem>
@@ -102,6 +103,8 @@ const Page = async () => {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+        <h1 className='text-center font-bold text-3xl my-8'>Retail Passports</h1>
+        <Separator className='my-8' />
         <div>
           {retailPassports?.length  && retailPassports.length > 0 
           ?
