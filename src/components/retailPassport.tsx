@@ -73,16 +73,18 @@ const alphaSizes = ["X", "XS", "M", "L", "XL" , "XXL"]
         
         { 
         partner &&
-        <div className="my-8">
+        <div className="mt-4">
         <Button variant="secondary" className={'rounded-xl text-sm hover:bg-slate-600'} onClick={handleShare}>
           {`Share it with ${partner.partner_name}`} </Button>
         </div>
         
         }
 
-      <div className="my-2">
+      
+      </CardFooter>
+      <CardFooter>
         <h4 className="text-xs font-extralight"> you used this at {Math.floor(Math.random() * 20)} retail sites!</h4>
-      </div>
+      
       </CardFooter>
       
       <CardContent>
