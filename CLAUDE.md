@@ -46,7 +46,9 @@ The platform has three interconnected surfaces:
 ```
 fitzyo/
 ├── CLAUDE.md                     ← You are here
-├── ARCHITECTURE.md               ← Full system design
+├── docs/ARCHITECTURE.md               ← Full system design
+├── docs/ROADMAP.md ← Application Roadmap
+├── docs/AGENTS.md ← Phoenix framework related points
 ├── mix.exs
 ├── config/
 │   ├── config.exs
