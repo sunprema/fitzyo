@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fitzyo — AI Video Workflow Builder</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-void: #080B0F;
+    --bg-deep: #0D1117;
+    --bg-surface: #131920;
+    --bg-raised: #1A2230;
+    --bg-hover: #1F2A3A;
+    --border-subtle: rgba(255,255,255,0.06);
+    --border-mid: rgba(255,255,255,0.1);
+    --border-strong: rgba(255,255,255,0.16);
+    --text-primary: #F0F4F8;
+    --text-secondary: #8B97A8;
+    --text-muted: #4A5568;
+    --accent-violet: #8B5CF6;
+    --accent-violet-dim: rgba(139,92,246,0.15);
+    --accent-amber: #F59E0B;
+    --accent-amber-dim: rgba(245,158,11,0.12);
+    --accent-teal: #14B8A6;
+    --accent-teal-dim: rgba(20,184,166,0.12);
+    --accent-blue: #3B82F6;
+    --accent-blue-dim: rgba(59,130,246,0.12);
+    --accent-green: #10B981;
+    --accent-green-dim: rgba(16,185,129,0.12);
+    --accent-red: #EF4444;
+    --node-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    --grid-color: rgba(255,255,255,0.025);
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg-void);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    height: 48px;
+    background: var(--bg-deep);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 0;
+    flex-shrink: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: -0.5px;
+    color: var(--text-primary);
+    margin-right: 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .logo-mark {
+    width: 26px;
+    height: 26px;
+    background: linear-gradient(135deg, var(--accent-violet), var(--accent-teal));
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    color: white;
+    font-family: 'Syne', sans-serif;
+  }
+
+  .topbar-workflow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .workflow-breadcrumb {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .workflow-name {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: var(--bg-raised);
+    padding: 3px 10px;
+    border-radius: 5px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .topbar-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--accent-green);
+    background: var(--accent-green-dim);
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-left: 12px;
+    border: 1px solid rgba(16,185,129,0.2);
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    animation: pulse 2s ease infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  .btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border-mid);
+    background: var(--bg-raised);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s;
+    letter-spacing: 0.01em;
+  }
+
+  .btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-strong); }
+
+  .btn-primary {
+    background: var(--accent-violet);
+    border-color: var(--accent-violet);
+    color: white;
+    font-weight: 500;
+  }
+  .btn-primary:hover { background: #7C3AED; border-color: #7C3AED; color: white; }
+
+  .btn-run {
+    background: var(--accent-green-dim);
+    border-color: rgba(16,185,129,0.3);
+    color: var(--accent-green);
+  }
+  .btn-run:hover { background: rgba(16,185,129,0.2); color: var(--accent-green); }
+
+  .btn-icon {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  .avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #8B5CF6, #14B8A6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    font-family: 'Syne', sans-serif;
+    border: 1.5px solid var(--border-mid);
+    cursor: pointer;
+  }
+
+  /* ── MAIN LAYOUT ── */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── LEFT: NODE PALETTE ── */
+  .palette {
+    width: 220px;
+    background: var(--bg-deep);
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .palette-search {
+    padding: 12px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .search-input {
+    width: 100%;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 6px 10px 6px 28px;
+    font-size: 12px;
+    color: var(--text-primary);
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    position: relative;
+  }
+
+  .search-wrap {
+    position: relative;
+  }
+
+  .search-icon {
+    position: absolute;
+    left: 9px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 12px;
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  .palette-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+
+  .palette-scroll::-webkit-scrollbar { width: 3px; }
+  .palette-scroll::-webkit-scrollbar-track { background: transparent; }
+  .palette-scroll::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 3px; }
+
+  .palette-section {
+    margin-bottom: 4px;
+  }
+
+  .palette-section-label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 8px 14px 4px;
+  }
+
+  .palette-node {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 14px;
+    cursor: grab;
+    border-radius: 0;
+    transition: background 0.1s;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+  }
+
+  .palette-node:hover {
+    background: var(--bg-raised);
+    color: var(--text-primary);
+  }
+
+  .palette-node-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .icon-trigger { background: var(--accent-amber-dim); color: var(--accent-amber); border: 1px solid rgba(245,158,11,0.2); }
+  .icon-generation { background: var(--accent-violet-dim); color: var(--accent-violet); border: 1px solid rgba(139,92,246,0.2); }
+  .icon-assembly { background: var(--accent-blue-dim); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.2); }
+  .icon-data { background: var(--accent-teal-dim); color: var(--accent-teal); border: 1px solid rgba(20,184,166,0.2); }
+  .icon-control { background: rgba(139,139,139,0.1); color: #888; border: 1px solid rgba(139,139,139,0.15); }
+
+  /* ── CANVAS ── */
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg-void);
+  }
+
+  .canvas-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--grid-color) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  /* ── NL PROMPT BAR ── */
+  .nl-bar {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 560px;
+    z-index: 50;
+  }
+
+  .nl-input-wrap {
+    display: flex;
+    align-items: center;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-mid);
+    border-radius: 10px;
+    padding: 8px 12px;
+    gap: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  .nl-input-wrap:focus-within {
+    border-color: var(--accent-violet);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 3px rgba(139,92,246,0.12);
+  }
+
+  .nl-spark {
+    font-size: 14px;
+    color: var(--accent-violet);
+    flex-shrink: 0;
+  }
+
+  .nl-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .nl-input::placeholder { color: var(--text-muted); }
+
+  .nl-btn {
+    background: var(--accent-violet);
+    border: none;
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    color: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-shrink: 0;
+  }
+
+  /* ── CANVAS TOOLBAR ── */
+  .canvas-toolbar {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 50;
+  }
+
+  .toolbar-btn {
+    width: 32px;
+    height: 32px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+
+  .toolbar-btn:hover { background: var(--bg-raised); color: var(--text-primary); border-color: var(--border-mid); }
+  .toolbar-btn.active { background: var(--accent-violet-dim); color: var(--accent-violet); border-color: rgba(139,92,246,0.3); }
+  .toolbar-sep { height: 1px; background: var(--border-subtle); margin: 2px 0; }
+
+  /* ── WORKFLOW NODES ── */
+  .nodes-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .wf-node {
+    position: absolute;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-mid);
+    border-radius: 10px;
+    min-width: 180px;
+    pointer-events: all;
+    cursor: grab;
+    box-shadow: var(--node-shadow);
+    transition: border-color 0.15s, box-shadow 0.15s;
+    user-select: none;
+  }
+
+  .wf-node:hover { border-color: var(--border-strong); box-shadow: 0 6px 32px rgba(0,0,0,0.6); }
+
+  .wf-node.selected {
+    border-color: var(--accent-violet);
+    box-shadow: 0 0 0 2px rgba(139,92,246,0.25), var(--node-shadow);
+  }
+
+  .wf-node.running {
+    border-color: var(--accent-amber);
+    box-shadow: 0 0 0 2px rgba(245,158,11,0.2), var(--node-shadow);
+    animation: node-pulse 1.5s ease infinite;
+  }
+
+  .wf-node.complete {
+    border-color: rgba(16,185,129,0.4);
+    box-shadow: 0 0 0 2px rgba(16,185,129,0.1), var(--node-shadow);
+  }
+
+  @keyframes node-pulse {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(245,158,11,0.2), var(--node-shadow); }
+    50% { box-shadow: 0 0 0 4px rgba(245,158,11,0.12), var(--node-shadow); }
+  }
+
+  .node-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 9px 12px 8px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .node-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .node-title {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+    flex: 1;
+  }
+
+  .node-status-badge {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 7px;
+    border-radius: 20px;
+    letter-spacing: 0.02em;
+  }
+
+  .badge-running { background: var(--accent-amber-dim); color: var(--accent-amber); border: 1px solid rgba(245,158,11,0.2); }
+  .badge-complete { background: var(--accent-green-dim); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.2); }
+  .badge-idle { background: rgba(255,255,255,0.04); color: var(--text-muted); border: 1px solid var(--border-subtle); }
+  .badge-waiting { background: rgba(59,130,246,0.12); color: var(--accent-blue); border: 1px solid rgba(59,130,246,0.2); }
+
+  .node-body {
+    padding: 10px 12px;
+  }
+
+  .node-field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  .node-field:last-child { margin-bottom: 0; }
+
+  .field-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .field-value {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-family: 'DM Mono', monospace;
+    background: var(--bg-raised);
+    padding: 2px 7px;
+    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .node-thumbnail {
+    width: 100%;
+    height: 72px;
+    background: var(--bg-raised);
+    border-radius: 6px;
+    margin-top: 8px;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .thumb-placeholder {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .thumb-complete {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    width: 100%;
+    height: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .thumb-complete::after {
+    content: '▶';
+    width: 24px;
+    height: 24px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: rgba(255,255,255,0.7);
+    backdrop-filter: blur(4px);
+  }
+
+  .thumb-duration {
+    position: absolute;
+    bottom: 5px;
+    right: 6px;
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    color: rgba(255,255,255,0.6);
+    background: rgba(0,0,0,0.4);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .thumb-progress-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    background: var(--accent-amber);
+    border-radius: 0 0 0 6px;
+    width: 62%;
+    transition: width 0.3s;
+  }
+
+  .thumb-generating {
+    background: var(--bg-raised);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    height: 100%;
+  }
+
+  .gen-label {
+    font-size: 10px;
+    color: var(--accent-amber);
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* handle dots */
+  .handle-left, .handle-right {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--bg-surface);
+    border: 2px solid var(--border-strong);
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: crosshair;
+    transition: border-color 0.1s, background 0.1s;
+  }
+
+  .handle-left { left: -5px; }
+  .handle-right { right: -5px; }
+
+  .wf-node:hover .handle-left,
+  .wf-node:hover .handle-right {
+    border-color: var(--accent-violet);
+    background: var(--accent-violet-dim);
+  }
+
+  .handle-multi { top: auto; }
+  .handle-multi.h1 { top: 28%; }
+  .handle-multi.h2 { top: 52%; }
+  .handle-multi.h3 { top: 76%; }
+
+  /* ── EDGES SVG ── */
+  .edges-svg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  /* ── APPROVAL NODE INLINE UI ── */
+  .approval-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .approval-btn {
+    flex: 1;
+    padding: 5px 0;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    border: 1px solid;
+    text-align: center;
+  }
+
+  .approval-approve { background: var(--accent-green-dim); color: var(--accent-green); border-color: rgba(16,185,129,0.2); }
+  .approval-reject { background: rgba(239,68,68,0.1); color: var(--accent-red); border-color: rgba(239,68,68,0.2); }
+
+  /* ── RIGHT PANEL ── */
+  .right-panel {
+    width: 268px;
+    background: var(--bg-deep);
+    border-left: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .panel-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+
+  .panel-tab {
+    flex: 1;
+    padding: 9px 0;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-align: center;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.1s;
+    letter-spacing: 0.01em;
+  }
+
+  .panel-tab.active { color: var(--text-primary); border-bottom-color: var(--accent-violet); }
+  .panel-tab:hover:not(.active) { color: var(--text-secondary); }
+
+  .panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+  }
+
+  .panel-body::-webkit-scrollbar { width: 3px; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 3px; }
+
+  .panel-section {
+    margin-bottom: 20px;
+  }
+
+  .panel-section-title {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  .config-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    gap: 10px;
+  }
+
+  .config-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+
+  .config-input {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 5px;
+    padding: 5px 8px;
+    font-size: 12px;
+    color: var(--text-primary);
+    font-family: 'DM Mono', monospace;
+    width: 120px;
+    outline: none;
+  }
+
+  .config-input:focus { border-color: var(--accent-violet); }
+
+  .config-select {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 5px;
+    padding: 5px 8px;
+    font-size: 12px;
+    color: var(--text-primary);
+    font-family: 'DM Mono', monospace;
+    width: 120px;
+    outline: none;
+  }
+
+  .asset-slot {
+    background: var(--bg-surface);
+    border: 1px dashed var(--border-mid);
+    border-radius: 7px;
+    padding: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 8px;
+  }
+
+  .asset-slot:hover { border-color: var(--accent-violet); background: var(--accent-violet-dim); }
+
+  .asset-slot-thumb {
+    width: 40px;
+    height: 30px;
+    border-radius: 4px;
+    background: var(--bg-raised);
+    overflow: hidden;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .asset-slot-thumb.has-asset {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+  }
+
+  .asset-slot-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .asset-slot-name {
+    font-size: 11.5px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .asset-slot-type {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .asset-browse-btn {
+    font-size: 10px;
+    color: var(--accent-violet);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  /* context panel */
+  .ctx-key {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px;
+    background: var(--bg-surface);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .ctx-key-name {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--accent-teal);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .ctx-key-val {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-family: 'DM Mono', monospace;
+    word-break: break-all;
+  }
+
+  .ctx-key.fresh { border-color: rgba(20,184,166,0.3); background: var(--accent-teal-dim); }
+
+  /* ── BOTTOM: TIMELINE ── */
+  .timeline {
+    height: 100px;
+    background: var(--bg-deep);
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+
+  .timeline-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 14px;
+    border-bottom: 1px solid var(--border-subtle);
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .timeline-title {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    flex: 1;
+  }
+
+  .timeline-duration {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .timeline-track {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 3px;
+    overflow-x: auto;
+  }
+
+  .timeline-track::-webkit-scrollbar { height: 3px; }
+  .timeline-track::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 3px; }
+
+  .timeline-clip {
+    height: 52px;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+    flex-shrink: 0;
+    border: 1px solid var(--border-subtle);
+    cursor: pointer;
+    transition: border-color 0.15s;
+    display: flex;
+    align-items: flex-end;
+  }
+
+  .timeline-clip:hover { border-color: var(--border-strong); }
+
+  .timeline-clip.active { border-color: var(--accent-violet); }
+
+  .clip-bg {
+    position: absolute;
+    inset: 0;
+  }
+
+  .clip-label {
+    position: relative;
+    font-size: 10px;
+    font-family: 'DM Mono', monospace;
+    color: rgba(255,255,255,0.7);
+    padding: 3px 6px;
+    background: rgba(0,0,0,0.4);
+    width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .clip-pending {
+    background: var(--bg-raised);
+    border: 1px dashed var(--border-mid);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .clip-pending-label {
+    font-size: 9px;
+    color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .timeline-separator {
+    width: 1px;
+    height: 32px;
+    background: var(--border-subtle);
+    flex-shrink: 0;
+  }
+
+  /* ── MINI MAP ── */
+  .minimap {
+    position: absolute;
+    bottom: 110px;
+    right: 14px;
+    width: 140px;
+    height: 90px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-mid);
+    border-radius: 8px;
+    overflow: hidden;
+    opacity: 0.85;
+  }
+
+  .minimap-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 10px 10px;
+  }
+
+  .minimap-node {
+    position: absolute;
+    border-radius: 2px;
+    opacity: 0.7;
+  }
+
+  .minimap-viewport {
+    position: absolute;
+    border: 1px solid var(--accent-violet);
+    border-radius: 2px;
+    background: rgba(139,92,246,0.06);
+  }
+
+  /* ── EXECUTION PROGRESS ── */
+  .exec-progress {
+    position: absolute;
+    bottom: 110px;
+    left: 14px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-mid);
+    border-radius: 8px;
+    padding: 10px 14px;
+    width: 220px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+
+  .exec-title {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .exec-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 11px;
+  }
+
+  .exec-step-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .dot-done { background: var(--accent-green); }
+  .dot-running { background: var(--accent-amber); animation: pulse 1.2s ease infinite; }
+  .dot-pending { background: var(--border-mid); }
+
+  .exec-step-name { color: var(--text-secondary); flex: 1; }
+  .exec-step-time { font-family: 'DM Mono', monospace; color: var(--text-muted); font-size: 10px; }
+
+  .exec-bar-wrap {
+    background: var(--bg-raised);
+    border-radius: 3px;
+    height: 3px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+
+  .exec-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-violet), var(--accent-teal));
+    border-radius: 3px;
+    width: 62%;
+    transition: width 0.5s;
+  }
+
+  /* ── FLOATING CONTEXT ── */
+  .context-peek {
+    position: absolute;
+    top: 68px;
+    right: 14px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-mid);
+    border-radius: 8px;
+    padding: 10px 12px;
+    width: 200px;
+    display: none;
+  }
+
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-mark">F</div>
+    Fitzyo
+  </div>
+
+  <div class="topbar-workflow">
+    <span class="workflow-breadcrumb">Workflows /</span>
+    <span class="workflow-name">luxury-watch-reveal.ftz</span>
+    <div class="topbar-status">
+      <div class="status-dot"></div>
+      Executing
+    </div>
+  </div>
+
+  <div class="topbar-actions">
+    <button class="btn">
+      <span>↩</span> Undo
+    </button>
+    <button class="btn">
+      <span>⬡</span> Templates
+    </button>
+    <button class="btn">
+      <span>⤴</span> Share
+    </button>
+    <button class="btn-primary btn">
+      <span>💾</span> Save
+    </button>
+    <button class="btn-run btn">
+      <span>▶</span> Run
+    </button>
+    <div style="width:1px;height:20px;background:var(--border-subtle);margin:0 4px;"></div>
+    <div class="avatar">AK</div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- PALETTE -->
+  <div class="palette">
+    <div class="palette-search">
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input class="search-input" placeholder="Search nodes…" value="">
+      </div>
+    </div>
+    <div class="palette-scroll">
+
+      <div class="palette-section">
+        <div class="palette-section-label">Triggers</div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-trigger">⏰</div>
+          Cron Schedule
+        </div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-trigger">🔔</div>
+          Webhook
+        </div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-trigger">👤</div>
+          Human Approval
+        </div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-trigger">⏳</div>
+          Wait / Delay
+        </div>
+      </div>
+
+      <div class="palette-section">
+        <div class="palette-section-label">Generation</div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-generation">🎬</div>
+          Scene Generator
+        </div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-generation">🎭</div>
+          Character Animate
+        </div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-generation">🌅</div>
+          Background Gen
+        </div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-generation">💬</div>
+          Lip Sync
+        </div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-generation">✨</div>
+          VFX Overlay
+        </div>
+      </div>
+
+      <div class="palette-section">
+        <div class="palette-section-label">Assembly</div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-assembly">✂️</div>
+          Scene Stitch
+        </div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-assembly">🔊</div>
+          Audio Mixer
+        </div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-assembly">🎞</div>
+          Transition
+        </div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-assembly">📤</div>
+          Final Export
+        </div>
+      </div>
+
+      <div class="palette-section">
+        <div class="palette-section-label">Data</div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-data">🖼</div>
+          Asset Loader
+        </div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-data">📝</div>
+          Prompt Template
+        </div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-data">🎨</div>
+          Style Reference
+        </div>
+      </div>
+
+      <div class="palette-section">
+        <div class="palette-section-label">Control</div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-control">⑃</div>
+          Conditional
+        </div>
+        <div class="palette-node">
+          <div class="palette-node-icon icon-control">⊕</div>
+          Parallel Merge
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CANVAS -->
+  <div class="canvas-wrap">
+    <div class="canvas-grid"></div>
+
+    <!-- NL PROMPT BAR -->
+    <div class="nl-bar">
+      <div class="nl-input-wrap">
+        <span class="nl-spark">✦</span>
+        <input class="nl-input" placeholder="Describe your video workflow in plain English…" value="A 30-second luxury watch reveal: macro gears, pull back to marble surface, brand name dolly, clasp on wrist">
+        <button class="nl-btn">Generate ✦</button>
+      </div>
+    </div>
+
+    <!-- CANVAS TOOLBAR -->
+    <div class="canvas-toolbar">
+      <div class="toolbar-btn active">↖</div>
+      <div class="toolbar-btn">✥</div>
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-btn">+</div>
+      <div class="toolbar-btn">−</div>
+      <div class="toolbar-btn">⊡</div>
+      <div class="toolbar-sep"></div>
+      <div class="toolbar-btn">⟲</div>
+    </div>
+
+    <!-- EDGES SVG -->
+    <svg class="edges-svg" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L6,3 z" fill="rgba(255,255,255,0.15)"/>
+        </marker>
+        <marker id="arrow-violet" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L6,3 z" fill="rgba(139,92,246,0.5)"/>
+        </marker>
+      </defs>
+      <!-- Webhook → Style Ref -->
+      <path d="M 328,204 C 380,204 380,238 432,238" stroke="rgba(255,255,255,0.1)" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+      <!-- Style Ref → Scene 1 -->
+      <path d="M 618,238 C 660,238 660,195 702,195" stroke="rgba(139,92,246,0.4)" stroke-width="1.5" fill="none" stroke-dasharray="none" marker-end="url(#arrow-violet)"/>
+      <!-- Style Ref → Scene 2 -->
+      <path d="M 618,238 C 660,238 660,354 702,354" stroke="rgba(139,92,246,0.4)" stroke-width="1.5" fill="none" marker-end="url(#arrow-violet)"/>
+      <!-- Style Ref → Scene 3 -->
+      <path d="M 618,238 C 665,238 665,500 702,500" stroke="rgba(139,92,246,0.3)" stroke-width="1.5" fill="none" marker-end="url(#arrow-violet)"/>
+      <!-- Scene 1 → Stitch -->
+      <path d="M 892,195 C 940,195 940,390 990,390" stroke="rgba(255,255,255,0.1)" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+      <!-- Scene 2 → Stitch -->
+      <path d="M 892,354 C 940,354 940,390 990,390" stroke="rgba(245,158,11,0.4)" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+      <!-- Scene 3 → Stitch -->
+      <path d="M 892,500 C 940,500 940,420 990,420" stroke="rgba(255,255,255,0.08)" stroke-width="1.5" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow)"/>
+      <!-- Stitch → Export -->
+      <path d="M 1170,400 C 1210,400 1210,440 1250,440" stroke="rgba(16,185,129,0.35)" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+    </svg>
+
+    <!-- NODES LAYER -->
+    <div class="nodes-layer">
+
+      <!-- WEBHOOK TRIGGER NODE -->
+      <div class="wf-node complete" style="left:148px;top:170px;width:180px;">
+        <div class="handle-right"></div>
+        <div class="node-header">
+          <div class="node-icon icon-trigger">🔔</div>
+          <div class="node-title">Webhook Trigger</div>
+          <div class="node-status-badge badge-complete">done</div>
+        </div>
+        <div class="node-body">
+          <div class="node-field">
+            <span class="field-label">token</span>
+            <span class="field-value">wh_lxk92…</span>
+          </div>
+          <div class="node-field">
+            <span class="field-label">fired_at</span>
+            <span class="field-value">14:32:01</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- STYLE REFERENCE NODE -->
+      <div class="wf-node complete" style="left:432px;top:200px;width:186px;">
+        <div class="handle-left"></div>
+        <div class="handle-right"></div>
+        <div class="node-header">
+          <div class="node-icon icon-data">🎨</div>
+          <div class="node-title">Style Reference</div>
+          <div class="node-status-badge badge-complete">done</div>
+        </div>
+        <div class="node-body">
+          <div class="node-field">
+            <span class="field-label">pack</span>
+            <span class="field-value">luxury-cinematic</span>
+          </div>
+          <div class="node-field">
+            <span class="field-label">mood</span>
+            <span class="field-value">warm golden</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCENE 1 — COMPLETE -->
+      <div class="wf-node complete selected" style="left:702px;top:118px;width:190px;">
+        <div class="handle-left"></div>
+        <div class="handle-right"></div>
+        <div class="node-header">
+          <div class="node-icon icon-generation">🎬</div>
+          <div class="node-title">Scene: Macro Gears</div>
+          <div class="node-status-badge badge-complete">done</div>
+        </div>
+        <div class="node-body">
+          <div class="node-field">
+            <span class="field-label">model</span>
+            <span class="field-value">kling-o1</span>
+          </div>
+          <div class="node-field">
+            <span class="field-label">duration</span>
+            <span class="field-value">5s</span>
+          </div>
+          <div class="node-thumbnail">
+            <div class="thumb-complete">
+              <div class="thumb-duration">0:05</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCENE 2 — RUNNING -->
+      <div class="wf-node running" style="left:702px;top:275px;width:190px;">
+        <div class="handle-left"></div>
+        <div class="handle-right"></div>
+        <div class="node-header">
+          <div class="node-icon icon-generation">🎬</div>
+          <div class="node-title">Scene: Watch Reveal</div>
+          <div class="node-status-badge badge-running">62%</div>
+        </div>
+        <div class="node-body">
+          <div class="node-field">
+            <span class="field-label">model</span>
+            <span class="field-value">runway-gen4.5</span>
+          </div>
+          <div class="node-field">
+            <span class="field-label">camera</span>
+            <span class="field-value">crane_up</span>
+          </div>
+          <div class="node-thumbnail">
+            <div class="thumb-generating">
+              <div class="gen-label">Generating… 62%</div>
+              <div class="thumb-progress-bar"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SCENE 3 — IDLE -->
+      <div class="wf-node" style="left:702px;top:432px;width:190px;">
+        <div class="handle-left"></div>
+        <div class="handle-right"></div>
+        <div class="node-header">
+          <div class="node-icon icon-generation">🎬</div>
+          <div class="node-title">Scene: Clasp on Wrist</div>
+          <div class="node-status-badge badge-idle">idle</div>
+        </div>
+        <div class="node-body">
+          <div class="node-field">
+            <span class="field-label">model</span>
+            <span class="field-value">veo-3.1</span>
+          </div>
+          <div class="node-field">
+            <span class="field-label">duration</span>
+            <span class="field-value">7s</span>
+          </div>
+          <div class="node-thumbnail">
+            <div class="thumb-placeholder">awaiting upstream</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STITCH NODE -->
+      <div class="wf-node" style="left:990px;top:350px;width:180px;">
+        <div class="handle-left"></div>
+        <div class="handle-right"></div>
+        <div class="node-header">
+          <div class="node-icon icon-assembly">✂️</div>
+          <div class="node-title">Scene Stitch</div>
+          <div class="node-status-badge badge-idle">idle</div>
+        </div>
+        <div class="node-body">
+          <div class="node-field">
+            <span class="field-label">transition</span>
+            <span class="field-value">dissolve</span>
+          </div>
+          <div class="node-field">
+            <span class="field-label">t_dur</span>
+            <span class="field-value">0.5s</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- EXPORT NODE -->
+      <div class="wf-node" style="left:1250px;top:400px;width:176px;">
+        <div class="handle-left"></div>
+        <div class="node-header">
+          <div class="node-icon icon-assembly">📤</div>
+          <div class="node-title">Final Export</div>
+          <div class="node-status-badge badge-idle">idle</div>
+        </div>
+        <div class="node-body">
+          <div class="node-field">
+            <span class="field-label">codec</span>
+            <span class="field-value">H.264 4K</span>
+          </div>
+          <div class="node-field">
+            <span class="field-label">dest</span>
+            <span class="field-value">Tigris/exports</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- EXECUTION PROGRESS PANEL -->
+    <div class="exec-progress">
+      <div class="exec-title">
+        <span style="color:var(--accent-amber)">⟳</span>
+        Executing workflow
+      </div>
+      <div class="exec-step">
+        <div class="exec-step-dot dot-done"></div>
+        <span class="exec-step-name">Webhook Trigger</span>
+        <span class="exec-step-time">0.1s</span>
+      </div>
+      <div class="exec-step">
+        <div class="exec-step-dot dot-done"></div>
+        <span class="exec-step-name">Style Reference</span>
+        <span class="exec-step-time">0.3s</span>
+      </div>
+      <div class="exec-step">
+        <div class="exec-step-dot dot-done"></div>
+        <span class="exec-step-name">Scene: Macro Gears</span>
+        <span class="exec-step-time">48s</span>
+      </div>
+      <div class="exec-step">
+        <div class="exec-step-dot dot-running"></div>
+        <span class="exec-step-name">Scene: Watch Reveal</span>
+        <span class="exec-step-time">31s…</span>
+      </div>
+      <div class="exec-step">
+        <div class="exec-step-dot dot-pending"></div>
+        <span class="exec-step-name">Scene: Clasp on Wrist</span>
+        <span class="exec-step-time">—</span>
+      </div>
+      <div class="exec-bar-wrap">
+        <div class="exec-bar"></div>
+      </div>
+    </div>
+
+    <!-- MINI MAP -->
+    <div class="minimap">
+      <div class="minimap-grid"></div>
+      <div class="minimap-node" style="left:10px;top:28px;width:22px;height:14px;background:rgba(16,185,129,0.3);border:1px solid rgba(16,185,129,0.4);"></div>
+      <div class="minimap-node" style="left:38px;top:32px;width:22px;height:14px;background:rgba(16,185,129,0.3);border:1px solid rgba(16,185,129,0.4);"></div>
+      <div class="minimap-node" style="left:66px;top:16px;width:22px;height:16px;background:rgba(139,92,246,0.3);border:1px solid rgba(139,92,246,0.4);"></div>
+      <div class="minimap-node" style="left:66px;top:38px;width:22px;height:16px;background:rgba(245,158,11,0.3);border:1px solid rgba(245,158,11,0.4);animation:pulse 1.5s ease infinite;"></div>
+      <div class="minimap-node" style="left:66px;top:58px;width:22px;height:14px;background:rgba(255,255,255,0.06);border:1px solid var(--border-subtle);"></div>
+      <div class="minimap-node" style="left:96px;top:46px;width:18px;height:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border-subtle);"></div>
+      <div class="minimap-node" style="left:118px;top:52px;width:18px;height:12px;background:rgba(255,255,255,0.06);border:1px solid var(--border-subtle);"></div>
+      <div class="minimap-viewport" style="left:6px;top:6px;width:102px;height:64px;"></div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="panel-tabs">
+      <div class="panel-tab active">Config</div>
+      <div class="panel-tab">Assets</div>
+      <div class="panel-tab">Context</div>
+    </div>
+    <div class="panel-body">
+
+      <div class="panel-section">
+        <div class="panel-section-title">Scene: Macro Gears</div>
+
+        <div class="config-row">
+          <span class="config-label">Prompt</span>
+        </div>
+        <textarea class="config-input" style="width:100%;height:60px;resize:none;font-size:11px;line-height:1.5;margin-bottom:10px;">Extreme macro close-up of watch gears, golden metal, cinematic depth of field, 35mm lens</textarea>
+
+        <div class="config-row">
+          <span class="config-label">Model</span>
+          <select class="config-select">
+            <option selected>kling-o1</option>
+            <option>runway-gen4.5</option>
+            <option>luma-ray3</option>
+            <option>veo-3.1</option>
+          </select>
+        </div>
+        <div class="config-row">
+          <span class="config-label">Duration</span>
+          <input class="config-input" value="5s" style="width:80px;">
+        </div>
+        <div class="config-row">
+          <span class="config-label">Camera</span>
+          <select class="config-select">
+            <option>static</option>
+            <option selected>dolly_in</option>
+            <option>crane_up</option>
+            <option>pan_right</option>
+          </select>
+        </div>
+        <div class="config-row">
+          <span class="config-label">Aspect</span>
+          <select class="config-select">
+            <option selected>16:9</option>
+            <option>9:16</option>
+            <option>1:1</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-section-title">Attached Assets</div>
+
+        <div class="asset-slot">
+          <div class="asset-slot-thumb has-asset"></div>
+          <div class="asset-slot-info">
+            <div class="asset-slot-name">marble-surface-01.jpg</div>
+            <div class="asset-slot-type">background_image</div>
+          </div>
+          <span class="asset-browse-btn">✕</span>
+        </div>
+
+        <div class="asset-slot">
+          <div class="asset-slot-thumb has-asset"></div>
+          <div class="asset-slot-info">
+            <div class="asset-slot-name">watch-reference.png</div>
+            <div class="asset-slot-type">character_ref</div>
+          </div>
+          <span class="asset-browse-btn">✕</span>
+        </div>
+
+        <div class="asset-slot">
+          <div class="asset-slot-thumb"></div>
+          <div class="asset-slot-info">
+            <div class="asset-slot-name" style="color:var(--text-muted)">Add audio track…</div>
+            <div class="asset-slot-type">audio_track</div>
+          </div>
+          <span class="asset-browse-btn" style="color:var(--accent-violet)">+</span>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-section-title">Output</div>
+        <div style="background:var(--bg-surface);border-radius:7px;padding:10px;border:1px solid var(--border-subtle);">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <div style="width:8px;height:8px;border-radius:50%;background:var(--accent-green);"></div>
+            <span style="font-size:11.5px;color:var(--text-primary)">scene_macro_gears.mp4</span>
+          </div>
+          <div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted);line-height:1.7;">
+            Duration: 5.0s<br>
+            Resolution: 3840×2160<br>
+            Size: 42.1 MB<br>
+            Codec: H.264<br>
+            Model: kling-o1
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- TIMELINE -->
+<div class="timeline">
+  <div class="timeline-header">
+    <span class="timeline-title">Timeline</span>
+    <span style="font-size:11px;color:var(--text-muted);">3 of 5 scenes complete</span>
+    <span class="timeline-duration">Total: ~30s</span>
+    <button class="btn" style="padding:3px 10px;font-size:11px;">Export Final ↗</button>
+  </div>
+  <div class="timeline-track">
+
+    <div class="timeline-clip active" style="width:88px;">
+      <div class="clip-bg" style="background:linear-gradient(135deg,#1a1a2e,#16213e 60%,#0c1a30);"></div>
+      <div class="clip-label">Macro Gears · 5s</div>
+    </div>
+
+    <div class="timeline-separator"></div>
+
+    <div class="timeline-clip" style="width:120px;position:relative;overflow:hidden;">
+      <div class="clip-bg" style="background:linear-gradient(135deg,#1c1400,#2a1f00 60%,#1a1400);"></div>
+      <div style="position:absolute;bottom:0;left:0;height:2px;width:62%;background:var(--accent-amber);"></div>
+      <div class="clip-label" style="color:var(--accent-amber);">Watch Reveal · 62%</div>
+    </div>
+
+    <div class="timeline-separator"></div>
+
+    <div class="timeline-clip clip-pending" style="width:104px;">
+      <div class="clip-pending-label">Clasp on Wrist</div>
+      <div class="clip-pending-label">7s · pending</div>
+    </div>
+
+    <div class="timeline-separator"></div>
+
+    <div class="timeline-clip clip-pending" style="width:50px;">
+      <div class="clip-pending-label">Stitch</div>
+    </div>
+
+    <div class="timeline-separator"></div>
+
+    <div class="timeline-clip clip-pending" style="width:50px;">
+      <div class="clip-pending-label">Export</div>
+    </div>
+
+    <div style="flex:1;"></div>
+
+    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;padding-left:10px;border-left:1px solid var(--border-subtle);">
+      <div style="font-size:11px;color:var(--text-muted);">Est. cost</div>
+      <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-primary);">$0.84</div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

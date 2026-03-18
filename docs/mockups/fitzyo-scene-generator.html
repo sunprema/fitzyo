@@ -1,0 +1,1746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fitzyo — Scene Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-void: #080B0F;
+    --bg-deep: #0D1117;
+    --bg-surface: #131920;
+    --bg-raised: #1A2230;
+    --bg-hover: #1F2A3A;
+    --border-subtle: rgba(255,255,255,0.06);
+    --border-mid: rgba(255,255,255,0.1);
+    --border-strong: rgba(255,255,255,0.16);
+    --text-primary: #F0F4F8;
+    --text-secondary: #8B97A8;
+    --text-muted: #4A5568;
+    --accent-violet: #8B5CF6;
+    --accent-violet-dim: rgba(139,92,246,0.15);
+    --accent-amber: #F59E0B;
+    --accent-amber-dim: rgba(245,158,11,0.12);
+    --accent-teal: #14B8A6;
+    --accent-teal-dim: rgba(20,184,166,0.12);
+    --accent-blue: #3B82F6;
+    --accent-blue-dim: rgba(59,130,246,0.12);
+    --accent-green: #10B981;
+    --accent-green-dim: rgba(16,185,129,0.12);
+    --accent-red: #EF4444;
+    --accent-red-dim: rgba(239,68,68,0.1);
+    --node-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg-void);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── TOP BAR ── */
+  .topbar {
+    height: 48px;
+    background: var(--bg-deep);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 0;
+    flex-shrink: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 18px;
+    letter-spacing: -0.5px;
+    color: var(--text-primary);
+    margin-right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .logo-mark {
+    width: 26px;
+    height: 26px;
+    background: linear-gradient(135deg, var(--accent-violet), var(--accent-teal));
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 800;
+    color: white;
+  }
+
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .breadcrumb-item { color: var(--text-muted); cursor: pointer; }
+  .breadcrumb-item:hover { color: var(--text-secondary); }
+  .breadcrumb-sep { color: var(--text-muted); font-size: 11px; }
+  .breadcrumb-item.current { color: var(--text-primary); cursor: default; }
+
+  .workflow-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--text-primary);
+    background: var(--bg-raised);
+    padding: 3px 10px;
+    border-radius: 5px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  .btn {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border-mid);
+    background: var(--bg-raised);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s;
+    letter-spacing: 0.01em;
+  }
+
+  .btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-strong); }
+
+  .btn-primary {
+    background: var(--accent-violet);
+    border-color: var(--accent-violet);
+    color: white;
+  }
+  .btn-primary:hover { background: #7C3AED; border-color: #7C3AED; color: white; }
+
+  .btn-generate {
+    background: linear-gradient(135deg, #7C3AED, #14B8A6);
+    border: none;
+    color: white;
+    font-weight: 500;
+    padding: 7px 18px;
+    font-size: 13px;
+    border-radius: 7px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    transition: opacity 0.15s;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .btn-generate:hover { opacity: 0.88; }
+
+  .btn-generate.generating {
+    background: var(--accent-amber-dim);
+    border: 1px solid rgba(245,158,11,0.3);
+    color: var(--accent-amber);
+    animation: glow-pulse 1.5s ease infinite;
+  }
+
+  @keyframes glow-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); }
+    50% { box-shadow: 0 0 12px 2px rgba(245,158,11,0.12); }
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 20px;
+  }
+
+  .status-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+  }
+
+  .pill-running { background: var(--accent-amber-dim); color: var(--accent-amber); border: 1px solid rgba(245,158,11,0.2); }
+  .pill-running .status-dot { background: var(--accent-amber); animation: pulse 1.2s ease infinite; }
+  .pill-complete { background: var(--accent-green-dim); color: var(--accent-green); border: 1px solid rgba(16,185,129,0.2); }
+  .pill-complete .status-dot { background: var(--accent-green); }
+
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.35} }
+
+  .avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: linear-gradient(135deg, #8B5CF6, #14B8A6);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; color: white;
+    font-family: 'Syne', sans-serif;
+    border: 1.5px solid var(--border-mid);
+    cursor: pointer; flex-shrink: 0;
+  }
+
+  /* ── MAIN LAYOUT ── */
+  .main {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ── LEFT CONFIG PANEL ── */
+  .left-panel {
+    width: 320px;
+    background: var(--bg-deep);
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 14px 16px 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+
+  .panel-header-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 4px;
+  }
+
+  .node-type-icon {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: var(--accent-violet-dim);
+    border: 1px solid rgba(139,92,246,0.25);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+
+  .panel-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.2px;
+  }
+
+  .panel-subtitle {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+    margin-left: 40px;
+  }
+
+  .panel-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+  }
+
+  .panel-scroll::-webkit-scrollbar { width: 3px; }
+  .panel-scroll::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 3px; }
+
+  .section {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .section:last-child { border-bottom: none; }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  /* PROMPT TEXTAREA */
+  .prompt-area {
+    width: 100%;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12.5px;
+    color: var(--text-primary);
+    font-family: 'DM Sans', sans-serif;
+    line-height: 1.6;
+    resize: none;
+    outline: none;
+    height: 88px;
+    transition: border-color 0.15s;
+  }
+
+  .prompt-area:focus { border-color: var(--accent-violet); }
+  .prompt-area::placeholder { color: var(--text-muted); }
+
+  .prompt-enhance {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 7px;
+    font-size: 11px;
+    color: var(--accent-violet);
+    cursor: pointer;
+    width: fit-content;
+  }
+
+  .prompt-enhance:hover { opacity: 0.75; }
+
+  /* FORM ROWS */
+  .form-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    gap: 10px;
+  }
+  .form-row:last-child { margin-bottom: 0; }
+
+  .form-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    min-width: 80px;
+  }
+
+  .form-input {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 5px;
+    padding: 6px 9px;
+    font-size: 12px;
+    color: var(--text-primary);
+    font-family: 'DM Mono', monospace;
+    outline: none;
+    flex: 1;
+    transition: border-color 0.15s;
+  }
+  .form-input:focus { border-color: var(--accent-violet); }
+
+  .form-select {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 5px;
+    padding: 6px 9px;
+    font-size: 12px;
+    color: var(--text-primary);
+    font-family: 'DM Mono', monospace;
+    outline: none;
+    flex: 1;
+    cursor: pointer;
+  }
+
+  /* MODEL SELECTOR */
+  .model-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .model-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 7px;
+    padding: 9px 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .model-card:hover { border-color: var(--border-mid); background: var(--bg-raised); }
+  .model-card.selected { border-color: var(--accent-violet); background: var(--accent-violet-dim); }
+
+  .model-card-name {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+  }
+
+  .model-card-tag {
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .model-card.selected .model-card-name { color: var(--accent-violet); }
+  .model-card.selected .model-card-tag { color: rgba(139,92,246,0.6); }
+
+  .model-auto-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    background: var(--accent-teal-dim);
+    color: var(--accent-teal);
+    border: 1px solid rgba(20,184,166,0.2);
+    padding: 2px 7px;
+    border-radius: 20px;
+    margin-top: 6px;
+  }
+
+  /* CAMERA MOVES */
+  .camera-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+  }
+
+  .camera-btn {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 8px 4px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .camera-btn:hover { border-color: var(--border-mid); color: var(--text-secondary); }
+  .camera-btn.selected { border-color: var(--accent-violet); background: var(--accent-violet-dim); color: var(--accent-violet); }
+
+  .camera-btn-icon { font-size: 14px; margin-bottom: 3px; display: block; }
+
+  /* DURATION SLIDER */
+  .duration-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .slider-wrap {
+    flex: 1;
+    position: relative;
+  }
+
+  .slider {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 3px;
+    border-radius: 3px;
+    background: var(--bg-raised);
+    outline: none;
+  }
+
+  .slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent-violet);
+    cursor: pointer;
+    border: 2px solid var(--bg-deep);
+    box-shadow: 0 0 0 1px rgba(139,92,246,0.4);
+  }
+
+  .slider-fill {
+    position: absolute;
+    left: 0; top: 5px;
+    height: 3px;
+    width: 33%;
+    background: var(--accent-violet);
+    border-radius: 3px;
+    pointer-events: none;
+  }
+
+  .duration-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 13px;
+    color: var(--text-primary);
+    min-width: 32px;
+    text-align: right;
+  }
+
+  /* ASSET SLOTS */
+  .asset-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 7px;
+    padding: 8px 10px;
+    cursor: pointer;
+    margin-bottom: 6px;
+    transition: all 0.15s;
+  }
+
+  .asset-row:hover { border-color: var(--border-mid); }
+  .asset-row.has-file:hover { border-color: var(--accent-violet); }
+  .asset-row.empty { border-style: dashed; }
+  .asset-row.empty:hover { border-color: var(--accent-violet); background: var(--accent-violet-dim); }
+
+  .asset-thumb {
+    width: 44px; height: 32px;
+    border-radius: 5px;
+    background: var(--bg-raised);
+    flex-shrink: 0;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .asset-thumb.img1 { background: linear-gradient(135deg, #0f1624, #1a2340, #0d1a30); }
+  .asset-thumb.img2 { background: linear-gradient(135deg, #1a0f0f, #2a1a10, #1a1408); }
+
+  .asset-info { flex: 1; min-width: 0; }
+  .asset-name { font-size: 12px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .asset-meta { font-size: 10px; color: var(--text-muted); font-family: 'DM Mono', monospace; margin-top: 1px; }
+
+  .asset-action {
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .asset-action.remove { color: var(--text-muted); }
+  .asset-action.remove:hover { color: var(--accent-red); }
+  .asset-action.add { color: var(--accent-violet); }
+
+  /* STYLE TAGS */
+  .tag-wrap { display: flex; flex-wrap: wrap; gap: 5px; }
+
+  .style-tag {
+    font-size: 11px;
+    font-family: 'DM Mono', monospace;
+    padding: 3px 9px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.12s;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted);
+    background: var(--bg-surface);
+  }
+
+  .style-tag:hover { border-color: var(--border-mid); color: var(--text-secondary); }
+  .style-tag.active { background: var(--accent-violet-dim); border-color: rgba(139,92,246,0.3); color: var(--accent-violet); }
+
+  /* ── CENTRE: PREVIEW AREA ── */
+  .preview-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg-void);
+    position: relative;
+  }
+
+  .preview-header {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    gap: 10px;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+    background: var(--bg-deep);
+  }
+
+  .preview-tabs {
+    display: flex;
+    gap: 2px;
+    background: var(--bg-surface);
+    border-radius: 7px;
+    padding: 3px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .preview-tab {
+    font-size: 12px;
+    padding: 4px 12px;
+    border-radius: 5px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.12s;
+    font-weight: 500;
+  }
+
+  .preview-tab.active { background: var(--bg-raised); color: var(--text-primary); }
+  .preview-tab:hover:not(.active) { color: var(--text-secondary); }
+
+  .preview-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  /* PREVIEW VIEWPORT */
+  .preview-viewport {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .video-frame {
+    width: 100%;
+    max-width: 760px;
+    aspect-ratio: 16/9;
+    background: var(--bg-surface);
+    border-radius: 10px;
+    border: 1px solid var(--border-mid);
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 16px 64px rgba(0,0,0,0.6);
+  }
+
+  .video-frame.generating {
+    border-color: rgba(245,158,11,0.3);
+    box-shadow: 0 0 0 2px rgba(245,158,11,0.08), 0 16px 64px rgba(0,0,0,0.6);
+  }
+
+  .video-frame.complete {
+    border-color: rgba(16,185,129,0.3);
+    box-shadow: 0 0 0 2px rgba(16,185,129,0.06), 0 16px 64px rgba(0,0,0,0.6);
+  }
+
+  /* Cinematic scene composition inside the frame */
+  .scene-bg {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(160deg,
+      #0a0e1a 0%,
+      #101828 25%,
+      #0d1520 50%,
+      #080d16 75%,
+      #060a12 100%
+    );
+  }
+
+  .scene-glow-1 {
+    position: absolute;
+    width: 300px; height: 300px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(245,158,11,0.12) 0%, transparent 70%);
+    top: 10%; left: 20%;
+    filter: blur(40px);
+    animation: float1 6s ease-in-out infinite;
+  }
+
+  .scene-glow-2 {
+    position: absolute;
+    width: 200px; height: 200px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(139,92,246,0.08) 0%, transparent 70%);
+    bottom: 20%; right: 25%;
+    filter: blur(30px);
+    animation: float2 8s ease-in-out infinite;
+  }
+
+  @keyframes float1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(12px,-8px)} }
+  @keyframes float2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-8px,12px)} }
+
+  /* Watch gear illustration inside scene */
+  .scene-subject {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .gear-svg {
+    opacity: 0.6;
+    animation: rotate-slow 20s linear infinite;
+  }
+
+  @keyframes rotate-slow { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+
+  .gear-svg-2 {
+    position: absolute;
+    opacity: 0.3;
+    animation: rotate-slow 14s linear infinite reverse;
+    transform-origin: 50% 50%;
+    left: calc(50% + 44px);
+    top: calc(50% - 22px);
+  }
+
+  /* Letterbox bars */
+  .letterbox-top, .letterbox-bottom {
+    position: absolute;
+    left: 0; right: 0;
+    height: 10%;
+    background: #060a12;
+    z-index: 2;
+  }
+  .letterbox-top { top: 0; }
+  .letterbox-bottom { bottom: 0; }
+
+  /* Timecode */
+  .timecode {
+    position: absolute;
+    bottom: 12%;
+    left: 16px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.4);
+    z-index: 3;
+    letter-spacing: 0.05em;
+  }
+
+  .model-watermark {
+    position: absolute;
+    bottom: 12%;
+    right: 16px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.25);
+    z-index: 3;
+  }
+
+  /* Generating overlay */
+  .generating-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(8,11,15,0.7);
+    backdrop-filter: blur(2px);
+  }
+
+  .gen-ring {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    border: 2px solid rgba(245,158,11,0.15);
+    border-top-color: var(--accent-amber);
+    animation: spin 1s linear infinite;
+    margin-bottom: 14px;
+  }
+
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  .gen-percent {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+
+  .gen-model {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--accent-amber);
+    margin-bottom: 16px;
+  }
+
+  .gen-progress-wrap {
+    width: 200px;
+    height: 2px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .gen-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-violet), var(--accent-amber));
+    border-radius: 2px;
+    width: 62%;
+    transition: width 0.4s;
+  }
+
+  /* Playback controls */
+  .playback-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0; right: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%);
+    padding: 16px 14px 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .video-frame:hover .playback-bar { opacity: 1; }
+
+  .play-btn {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,0.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+    cursor: pointer;
+    flex-shrink: 0;
+    color: white;
+  }
+
+  .scrub-bar {
+    flex: 1;
+    height: 3px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 3px;
+    position: relative;
+    cursor: pointer;
+  }
+
+  .scrub-fill {
+    height: 100%;
+    background: white;
+    border-radius: 3px;
+    width: 0%;
+  }
+
+  .scrub-thumb {
+    position: absolute;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: white;
+    top: -3.5px;
+    left: 0%;
+    transform: translateX(-50%);
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.3);
+  }
+
+  .time-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: rgba(255,255,255,0.6);
+    flex-shrink: 0;
+  }
+
+  /* ITERATION STRIP */
+  .iteration-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--border-subtle);
+    background: var(--bg-deep);
+    flex-shrink: 0;
+    overflow-x: auto;
+  }
+
+  .iteration-strip::-webkit-scrollbar { height: 3px; }
+  .iteration-strip::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 3px; }
+
+  .iter-label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    margin-right: 4px;
+  }
+
+  .iter-thumb {
+    width: 80px;
+    height: 48px;
+    border-radius: 6px;
+    border: 1.5px solid var(--border-subtle);
+    overflow: hidden;
+    cursor: pointer;
+    flex-shrink: 0;
+    position: relative;
+    transition: border-color 0.12s;
+  }
+
+  .iter-thumb:hover { border-color: var(--border-strong); }
+  .iter-thumb.active { border-color: var(--accent-violet); }
+
+  .iter-thumb-bg {
+    position: absolute;
+    inset: 0;
+  }
+
+  .iter-num {
+    position: absolute;
+    bottom: 3px; left: 4px;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: rgba(255,255,255,0.5);
+    background: rgba(0,0,0,0.4);
+    padding: 1px 4px;
+    border-radius: 2px;
+  }
+
+  .iter-model-tag {
+    position: absolute;
+    top: 3px; right: 3px;
+    font-family: 'DM Mono', monospace;
+    font-size: 8px;
+    background: rgba(0,0,0,0.5);
+    color: rgba(255,255,255,0.4);
+    padding: 1px 3px;
+    border-radius: 2px;
+  }
+
+  .iter-add {
+    width: 80px; height: 48px;
+    border-radius: 6px;
+    border: 1.5px dashed var(--border-mid);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.12s;
+  }
+
+  .iter-add:hover { border-color: var(--accent-violet); color: var(--accent-violet); background: var(--accent-violet-dim); }
+
+  /* ── RIGHT: OUTPUT + CONTEXT PANEL ── */
+  .right-panel {
+    width: 264px;
+    background: var(--bg-deep);
+    border-left: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .right-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+
+  .right-tab {
+    flex: 1;
+    padding: 10px 0;
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-align: center;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.1s;
+  }
+
+  .right-tab.active { color: var(--text-primary); border-bottom-color: var(--accent-violet); }
+
+  .right-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+  }
+
+  .right-body::-webkit-scrollbar { width: 3px; }
+  .right-body::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 3px; }
+
+  .output-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+
+  .output-preview {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: linear-gradient(135deg, #0a0e1a 0%, #101828 50%, #080d16 100%);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .output-play {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: white;
+    transition: background 0.15s;
+  }
+
+  .output-preview:hover .output-play { background: rgba(255,255,255,0.2); }
+
+  .output-meta {
+    padding: 10px 12px;
+  }
+
+  .output-filename {
+    font-size: 12px;
+    color: var(--text-primary);
+    font-family: 'DM Mono', monospace;
+    margin-bottom: 8px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .meta-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .meta-item {
+    background: var(--bg-raised);
+    border-radius: 5px;
+    padding: 5px 7px;
+  }
+
+  .meta-key {
+    font-size: 9px;
+    color: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 2px;
+  }
+
+  .meta-val {
+    font-size: 11px;
+    color: var(--text-primary);
+    font-family: 'DM Mono', monospace;
+  }
+
+  .output-actions {
+    display: flex;
+    gap: 6px;
+    padding: 0 12px 10px;
+  }
+
+  .action-btn {
+    flex: 1;
+    padding: 6px 0;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    border: 1px solid var(--border-mid);
+    background: var(--bg-raised);
+    color: var(--text-secondary);
+    text-align: center;
+    transition: all 0.12s;
+  }
+
+  .action-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+  .action-btn.primary { background: var(--accent-violet-dim); border-color: rgba(139,92,246,0.3); color: var(--accent-violet); }
+  .action-btn.primary:hover { background: rgba(139,92,246,0.25); }
+
+  /* CONTEXT SECTION */
+  .ctx-entry {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+  }
+
+  .ctx-entry.fresh { border-color: rgba(20,184,166,0.25); background: var(--accent-teal-dim); }
+
+  .ctx-path {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--accent-teal);
+    margin-bottom: 3px;
+  }
+
+  .ctx-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    word-break: break-all;
+    line-height: 1.5;
+  }
+
+  /* NODE CONNECTIONS diagram */
+  .connections-diagram {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+
+  .conn-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 7px;
+    font-size: 11.5px;
+  }
+
+  .conn-row:last-child { margin-bottom: 0; }
+
+  .conn-dir {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    width: 28px;
+    flex-shrink: 0;
+    text-align: right;
+  }
+
+  .conn-node {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--bg-raised);
+    padding: 3px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    border: 1px solid var(--border-subtle);
+  }
+
+  .conn-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+  }
+
+  .conn-handle {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  /* COST ESTIMATE */
+  .cost-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+
+  .cost-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-size: 11.5px;
+  }
+
+  .cost-row:last-child { margin-bottom: 0; border-top: 1px solid var(--border-subtle); padding-top: 6px; }
+  .cost-label { color: var(--text-secondary); }
+  .cost-val { font-family: 'DM Mono', monospace; color: var(--text-primary); }
+  .cost-total { font-weight: 500; color: var(--text-primary); }
+
+  /* ── BOTTOM GENERATE BAR ── */
+  .generate-bar {
+    padding: 12px 16px;
+    background: var(--bg-deep);
+    border-top: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .gen-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    flex: 1;
+  }
+
+  .gen-cost {
+    font-family: 'DM Mono', monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-mark">F</div>
+    Fitzyo
+  </div>
+
+  <div class="breadcrumb">
+    <span class="breadcrumb-item">Workflows</span>
+    <span class="breadcrumb-sep">›</span>
+    <span class="breadcrumb-item">luxury-watch-reveal.ftz</span>
+    <span class="breadcrumb-sep">›</span>
+    <span class="breadcrumb-item current" style="display:flex;align-items:center;gap:6px;">
+      <span style="font-size:12px;">🎬</span>
+      Scene: Macro Gears
+    </span>
+  </div>
+
+  <div class="topbar-right">
+    <div class="status-pill pill-running">
+      <div class="status-dot"></div>
+      Generating · 62%
+    </div>
+    <button class="btn">← Back to Canvas</button>
+    <button class="btn">⎘ Duplicate</button>
+    <div style="width:1px;height:20px;background:var(--border-subtle);"></div>
+    <div class="avatar">AK</div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- LEFT CONFIG PANEL -->
+  <div class="left-panel">
+
+    <div class="panel-header">
+      <div class="panel-header-top">
+        <div class="node-type-icon">🎬</div>
+        <div>
+          <div class="panel-title">Scene Generator</div>
+        </div>
+      </div>
+      <div class="panel-subtitle">:scene_generator · Fitzyo.Video.Nodes.SceneGeneratorStep</div>
+    </div>
+
+    <div class="panel-scroll">
+
+      <!-- PROMPT -->
+      <div class="section">
+        <div class="section-label">Scene Prompt</div>
+        <textarea class="prompt-area">Extreme macro close-up of luxury watch gears, golden metal and sapphire crystal, cinematic depth of field, warm amber light raking across the surface, 35mm lens</textarea>
+        <div class="prompt-enhance">
+          <span>✦</span>
+          <span style="font-size:11px;">Enhance with AI</span>
+        </div>
+      </div>
+
+      <!-- MODEL -->
+      <div class="section">
+        <div class="section-label">AI Model</div>
+        <div class="model-cards">
+          <div class="model-card selected">
+            <div class="model-card-name">kling-o1</div>
+            <div class="model-card-tag">Image ref · 10s</div>
+          </div>
+          <div class="model-card">
+            <div class="model-card-name">runway-gen4.5</div>
+            <div class="model-card-tag">Physics · 10s</div>
+          </div>
+          <div class="model-card">
+            <div class="model-card-name">luma-ray3</div>
+            <div class="model-card-tag">HDR · 4K</div>
+          </div>
+          <div class="model-card">
+            <div class="model-card-name">veo-3.1</div>
+            <div class="model-card-tag">Audio sync</div>
+          </div>
+        </div>
+        <div class="model-auto-badge">
+          <span>⚡</span>
+          Auto-routed: best for image reference
+        </div>
+      </div>
+
+      <!-- CAMERA & TIMING -->
+      <div class="section">
+        <div class="section-label">Camera Movement</div>
+        <div class="camera-grid">
+          <div class="camera-btn">
+            <span class="camera-btn-icon">⊡</span>
+            Static
+          </div>
+          <div class="camera-btn selected">
+            <span class="camera-btn-icon">↗</span>
+            Dolly In
+          </div>
+          <div class="camera-btn">
+            <span class="camera-btn-icon">↑</span>
+            Crane Up
+          </div>
+          <div class="camera-btn">
+            <span class="camera-btn-icon">←</span>
+            Pan Left
+          </div>
+          <div class="camera-btn">
+            <span class="camera-btn-icon">→</span>
+            Pan Right
+          </div>
+          <div class="camera-btn">
+            <span class="camera-btn-icon">〰</span>
+            Handheld
+          </div>
+        </div>
+      </div>
+
+      <!-- DURATION -->
+      <div class="section">
+        <div class="section-label">Duration</div>
+        <div class="duration-row">
+          <div class="slider-wrap">
+            <input type="range" class="slider" min="3" max="15" value="5" id="dur-slider">
+            <div class="slider-fill" id="dur-fill"></div>
+          </div>
+          <div class="duration-val" id="dur-val">5s</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;">
+          <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;">3s</span>
+          <span style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;">15s</span>
+        </div>
+      </div>
+
+      <!-- ASPECT / RESOLUTION -->
+      <div class="section">
+        <div class="section-label">Output</div>
+        <div class="form-row">
+          <span class="form-label">Aspect ratio</span>
+          <select class="form-select">
+            <option selected>16:9 Widescreen</option>
+            <option>9:16 Vertical</option>
+            <option>1:1 Square</option>
+            <option>2.35:1 Anamorphic</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <span class="form-label">Resolution</span>
+          <select class="form-select">
+            <option>1080p HD</option>
+            <option selected>2160p 4K</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- STYLE TAGS -->
+      <div class="section">
+        <div class="section-label">Style Modifiers</div>
+        <div class="tag-wrap">
+          <div class="style-tag active">cinematic</div>
+          <div class="style-tag active">35mm</div>
+          <div class="style-tag active">warm golden</div>
+          <div class="style-tag">slow motion</div>
+          <div class="style-tag">anamorphic</div>
+          <div class="style-tag active">depth of field</div>
+          <div class="style-tag">high contrast</div>
+          <div class="style-tag">film grain</div>
+          <div class="style-tag">bokeh</div>
+          <div class="style-tag">lens flare</div>
+          <div class="style-tag active">macro</div>
+        </div>
+      </div>
+
+      <!-- ASSETS -->
+      <div class="section">
+        <div class="section-label">Reference Assets</div>
+
+        <div class="asset-row has-file">
+          <div class="asset-thumb img2">
+            <svg width="24" height="18" viewBox="0 0 24 18" fill="none">
+              <rect x="2" y="4" width="20" height="10" rx="2" stroke="rgba(245,158,11,0.3)" stroke-width="1"/>
+              <circle cx="12" cy="9" r="3" stroke="rgba(245,158,11,0.4)" stroke-width="1"/>
+            </svg>
+          </div>
+          <div class="asset-info">
+            <div class="asset-name">watch-gears-ref.jpg</div>
+            <div class="asset-meta">character_ref · 2.1 MB · 3200×2400</div>
+          </div>
+          <div class="asset-action remove">✕</div>
+        </div>
+
+        <div class="asset-row has-file">
+          <div class="asset-thumb img1">
+            <svg width="24" height="18" viewBox="0 0 24 18" fill="none">
+              <rect x="1" y="1" width="22" height="16" rx="2" stroke="rgba(59,130,246,0.3)" stroke-width="1"/>
+              <path d="M1 12 Q8 7 12 10 Q16 13 23 6" stroke="rgba(59,130,246,0.4)" stroke-width="1" fill="none"/>
+            </svg>
+          </div>
+          <div class="asset-info">
+            <div class="asset-name">luxury-cinematic.style</div>
+            <div class="asset-meta">style_pack · from StyleReference node</div>
+          </div>
+          <div class="asset-action remove">✕</div>
+        </div>
+
+        <div class="asset-row empty">
+          <div class="asset-thumb" style="font-size:14px;color:var(--text-muted);">+</div>
+          <div class="asset-info">
+            <div class="asset-name" style="color:var(--text-muted);">Add from marketplace…</div>
+            <div class="asset-meta">background_image, audio_track</div>
+          </div>
+          <div class="asset-action add">Browse</div>
+        </div>
+      </div>
+
+      <!-- ADVANCED -->
+      <div class="section">
+        <div class="section-label">Advanced</div>
+        <div class="form-row">
+          <span class="form-label">Seed</span>
+          <input class="form-input" value="auto" style="flex:1;">
+        </div>
+        <div class="form-row">
+          <span class="form-label">Guidance</span>
+          <input class="form-input" value="7.5" type="number" style="flex:1;">
+        </div>
+        <div class="form-row">
+          <span class="form-label">Steps</span>
+          <input class="form-input" value="50" type="number" style="flex:1;">
+        </div>
+      </div>
+
+    </div>
+
+    <!-- GENERATE BUTTON -->
+    <div class="generate-bar">
+      <div class="gen-hint">kling-o1 · 5s · 4K · $0.23</div>
+      <button class="btn-generate generating">
+        <div style="width:12px;height:12px;border:1.5px solid rgba(245,158,11,0.3);border-top-color:var(--accent-amber);border-radius:50%;animation:spin 0.8s linear infinite;flex-shrink:0;"></div>
+        Generating 62%
+      </button>
+    </div>
+
+  </div>
+
+  <!-- CENTRE PREVIEW -->
+  <div class="preview-area">
+
+    <div class="preview-header">
+      <div class="preview-tabs">
+        <div class="preview-tab active">Preview</div>
+        <div class="preview-tab">Frames</div>
+        <div class="preview-tab">Compare</div>
+      </div>
+      <div class="preview-header-right">
+        <button class="btn" style="font-size:11px;padding:5px 10px;">⤢ Fullscreen</button>
+        <button class="btn" style="font-size:11px;padding:5px 10px;">⬇ Download</button>
+      </div>
+    </div>
+
+    <div class="preview-viewport">
+      <!-- VIDEO FRAME -->
+      <div class="video-frame generating">
+
+        <!-- Scene background -->
+        <div class="scene-bg"></div>
+        <div class="scene-glow-1"></div>
+        <div class="scene-glow-2"></div>
+
+        <!-- Gear illustration -->
+        <div class="scene-subject">
+          <svg class="gear-svg" width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="60" cy="60" r="28" stroke="rgba(245,158,11,0.35)" stroke-width="2"/>
+            <circle cx="60" cy="60" r="16" stroke="rgba(245,158,11,0.25)" stroke-width="1.5"/>
+            <circle cx="60" cy="60" r="6" fill="rgba(245,158,11,0.2)" stroke="rgba(245,158,11,0.4)" stroke-width="1.5"/>
+            <!-- Gear teeth -->
+            <rect x="57" y="24" width="6" height="10" rx="2" fill="rgba(245,158,11,0.25)" transform="rotate(0 60 60)"/>
+            <rect x="57" y="24" width="6" height="10" rx="2" fill="rgba(245,158,11,0.25)" transform="rotate(30 60 60)"/>
+            <rect x="57" y="24" width="6" height="10" rx="2" fill="rgba(245,158,11,0.25)" transform="rotate(60 60 60)"/>
+            <rect x="57" y="24" width="6" height="10" rx="2" fill="rgba(245,158,11,0.25)" transform="rotate(90 60 60)"/>
+            <rect x="57" y="24" width="6" height="10" rx="2" fill="rgba(245,158,11,0.25)" transform="rotate(120 60 60)"/>
+            <rect x="57" y="24" width="6" height="10" rx="2" fill="rgba(245,158,11,0.25)" transform="rotate(150 60 60)"/>
+            <rect x="57" y="24" width="6" height="10" rx="2" fill="rgba(245,158,11,0.25)" transform="rotate(180 60 60)"/>
+            <rect x="57" y="24" width="6" height="10" rx="2" fill="rgba(245,158,11,0.25)" transform="rotate(210 60 60)"/>
+            <rect x="57" y="24" width="6" height="10" rx="2" fill="rgba(245,158,11,0.25)" transform="rotate(240 60 60)"/>
+            <rect x="57" y="24" width="6" height="10" rx="2" fill="rgba(245,158,11,0.25)" transform="rotate(270 60 60)"/>
+            <rect x="57" y="24" width="6" height="10" rx="2" fill="rgba(245,158,11,0.25)" transform="rotate(300 60 60)"/>
+            <rect x="57" y="24" width="6" height="10" rx="2" fill="rgba(245,158,11,0.25)" transform="rotate(330 60 60)"/>
+          </svg>
+          <svg class="gear-svg-2" width="70" height="70" viewBox="0 0 70 70" fill="none">
+            <circle cx="35" cy="35" r="16" stroke="rgba(139,92,246,0.3)" stroke-width="1.5"/>
+            <circle cx="35" cy="35" r="7" stroke="rgba(139,92,246,0.2)" stroke-width="1"/>
+            <circle cx="35" cy="35" r="3" fill="rgba(139,92,246,0.2)" stroke="rgba(139,92,246,0.35)" stroke-width="1"/>
+            <rect x="33" y="13" width="4" height="7" rx="1.5" fill="rgba(139,92,246,0.2)" transform="rotate(0 35 35)"/>
+            <rect x="33" y="13" width="4" height="7" rx="1.5" fill="rgba(139,92,246,0.2)" transform="rotate(45 35 35)"/>
+            <rect x="33" y="13" width="4" height="7" rx="1.5" fill="rgba(139,92,246,0.2)" transform="rotate(90 35 35)"/>
+            <rect x="33" y="13" width="4" height="7" rx="1.5" fill="rgba(139,92,246,0.2)" transform="rotate(135 35 35)"/>
+            <rect x="33" y="13" width="4" height="7" rx="1.5" fill="rgba(139,92,246,0.2)" transform="rotate(180 35 35)"/>
+            <rect x="33" y="13" width="4" height="7" rx="1.5" fill="rgba(139,92,246,0.2)" transform="rotate(225 35 35)"/>
+            <rect x="33" y="13" width="4" height="7" rx="1.5" fill="rgba(139,92,246,0.2)" transform="rotate(270 35 35)"/>
+            <rect x="33" y="13" width="4" height="7" rx="1.5" fill="rgba(139,92,246,0.2)" transform="rotate(315 35 35)"/>
+          </svg>
+        </div>
+
+        <!-- Letterbox -->
+        <div class="letterbox-top"></div>
+        <div class="letterbox-bottom"></div>
+
+        <!-- Timecode -->
+        <div class="timecode">00:00:03:14</div>
+        <div class="model-watermark">kling-o1</div>
+
+        <!-- Generating overlay -->
+        <div class="generating-overlay">
+          <div class="gen-ring"></div>
+          <div class="gen-percent">62%</div>
+          <div class="gen-model">kling-o1 · 4K · 5s</div>
+          <div class="gen-progress-wrap">
+            <div class="gen-progress-bar"></div>
+          </div>
+        </div>
+
+        <!-- Playback controls (shows on hover) -->
+        <div class="playback-bar">
+          <div class="play-btn">▶</div>
+          <div class="scrub-bar">
+            <div class="scrub-fill" style="width:0%;"></div>
+            <div class="scrub-thumb" style="left:0%;"></div>
+          </div>
+          <div class="time-label">0:00 / 0:05</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ITERATION STRIP -->
+    <div class="iteration-strip">
+      <span class="iter-label">Iterations</span>
+
+      <div class="iter-thumb active">
+        <div class="iter-thumb-bg" style="background:linear-gradient(135deg,#0a0e1a,#16213e,#0f1830);"></div>
+        <div class="iter-num">v1</div>
+        <div class="iter-model-tag">k-o1</div>
+      </div>
+
+      <div class="iter-thumb">
+        <div class="iter-thumb-bg" style="background:linear-gradient(135deg,#100a0a,#1e1008,#120e04);"></div>
+        <div class="iter-num">v2</div>
+        <div class="iter-model-tag">rw</div>
+      </div>
+
+      <div class="iter-thumb">
+        <div class="iter-thumb-bg" style="background:linear-gradient(135deg,#060a12,#0d1520,#070c14);"></div>
+        <div class="iter-num">v3 ●</div>
+        <div class="iter-model-tag">k-o1</div>
+      </div>
+
+      <div class="iter-add">+</div>
+
+      <div style="flex:1;"></div>
+
+      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;padding-left:10px;border-left:1px solid var(--border-subtle);">
+        <div style="font-size:11px;color:var(--text-muted);">v3 generating</div>
+        <div style="font-size:11px;font-family:'DM Mono',monospace;color:var(--accent-amber);">est. ~45s</div>
+        <button class="btn" style="font-size:11px;padding:4px 10px;color:var(--accent-red);border-color:rgba(239,68,68,0.2);background:var(--accent-red-dim);">✕ Cancel</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="right-tabs">
+      <div class="right-tab active">Output</div>
+      <div class="right-tab">Connections</div>
+      <div class="right-tab">Context</div>
+    </div>
+    <div class="right-body">
+
+      <!-- OUTPUT CARD: Previous completed version -->
+      <div style="font-size:10px;font-weight:500;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Latest Output (v2)</div>
+
+      <div class="output-card">
+        <div class="output-preview">
+          <div style="position:absolute;inset:0;background:linear-gradient(135deg,#100a0a,#1e1008,#120e04);"></div>
+          <div class="output-play">▶</div>
+          <div style="position:absolute;bottom:6px;right:8px;font-family:'DM Mono',monospace;font-size:9px;color:rgba(255,255,255,0.35);">0:05</div>
+        </div>
+        <div class="output-meta">
+          <div class="output-filename">scene_macro_gears_v2.mp4</div>
+          <div class="meta-grid">
+            <div class="meta-item">
+              <div class="meta-key">Duration</div>
+              <div class="meta-val">5.0s</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-key">Resolution</div>
+              <div class="meta-val">3840×2160</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-key">Model</div>
+              <div class="meta-val">runway</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-key">Size</div>
+              <div class="meta-val">38.4 MB</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-key">FPS</div>
+              <div class="meta-val">24</div>
+            </div>
+            <div class="meta-item">
+              <div class="meta-key">Cost</div>
+              <div class="meta-val">$0.19</div>
+            </div>
+          </div>
+        </div>
+        <div class="output-actions">
+          <div class="action-btn primary">Use this ✓</div>
+          <div class="action-btn">⬇ Save</div>
+        </div>
+      </div>
+
+      <!-- COST ESTIMATE -->
+      <div style="font-size:10px;font-weight:500;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Cost Summary</div>
+
+      <div class="cost-card">
+        <div class="cost-row">
+          <span class="cost-label">v1 · kling-o1</span>
+          <span class="cost-val">$0.23</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label">v2 · runway-gen4.5</span>
+          <span class="cost-val">$0.19</span>
+        </div>
+        <div class="cost-row" style="color:var(--accent-amber);">
+          <span class="cost-label" style="color:var(--accent-amber);">v3 · kling-o1 (running)</span>
+          <span class="cost-val" style="color:var(--accent-amber);">~$0.23</span>
+        </div>
+        <div class="cost-row">
+          <span class="cost-label cost-total">Total this node</span>
+          <span class="cost-val cost-total">$0.65</span>
+        </div>
+      </div>
+
+      <!-- CONTEXT READS/WRITES -->
+      <div style="font-size:10px;font-weight:500;letter-spacing:0.07em;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;margin-top:4px;">Context Written</div>
+
+      <div class="ctx-entry fresh">
+        <div class="ctx-path">scenes.macro_gears.clip</div>
+        <div class="ctx-val">S3Ref(fitzyo-video-clips/…/scene_1_v2.mp4)</div>
+      </div>
+
+      <div class="ctx-entry fresh">
+        <div class="ctx-path">scenes.macro_gears.duration</div>
+        <div class="ctx-val">5.0</div>
+      </div>
+
+      <div class="ctx-entry">
+        <div class="ctx-path">stats.api_calls</div>
+        <div class="ctx-val">2 → 3</div>
+      </div>
+
+      <div class="ctx-entry">
+        <div class="ctx-path">stats.total_cost_usd</div>
+        <div class="ctx-val">$0.42 → $0.65</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const slider = document.getElementById('dur-slider');
+  const fill = document.getElementById('dur-fill');
+  const val = document.getElementById('dur-val');
+
+  function updateSlider() {
+    const min = +slider.min, max = +slider.max, v = +slider.value;
+    const pct = ((v - min) / (max - min)) * 100;
+    fill.style.width = pct + '%';
+    val.textContent = v + 's';
+  }
+
+  slider.addEventListener('input', updateSlider);
+  updateSlider();
+
+  // Simulate progress
+  let pct = 62;
+  const genRing = document.querySelector('.gen-ring');
+  const genPct = document.querySelector('.gen-percent');
+  const genBar = document.querySelector('.gen-progress-bar');
+  const genBtn = document.querySelector('.btn-generate');
+  const statusPill = document.querySelector('.status-pill');
+  const iterCurrent = document.querySelector('.iter-thumb.active + .iter-thumb + .iter-thumb .iter-num');
+
+  const interval = setInterval(() => {
+    pct = Math.min(pct + 0.4, 100);
+    const display = Math.round(pct);
+    genPct.textContent = display + '%';
+    genBar.style.width = pct + '%';
+    if (document.querySelector('.topbar-right .status-pill'))
+      document.querySelector('.topbar-right .status-pill').querySelector('.status-dot').style.background = 'var(--accent-amber)';
+
+    if (pct >= 100) {
+      clearInterval(interval);
+      document.querySelector('.generating-overlay').style.display = 'none';
+      document.querySelector('.video-frame').classList.remove('generating');
+      document.querySelector('.video-frame').classList.add('complete');
+      genBtn.classList.remove('generating');
+      genBtn.innerHTML = '✦ Regenerate';
+      genBtn.style.background = 'linear-gradient(135deg, #7C3AED, #14B8A6)';
+      genBtn.style.border = 'none';
+      genBtn.style.color = 'white';
+      genBtn.style.animation = 'none';
+      statusPill.classList.remove('pill-running');
+      statusPill.classList.add('pill-complete');
+      statusPill.innerHTML = '<div class="status-dot" style="background:var(--accent-green);width:6px;height:6px;border-radius:50%;"></div> Complete';
+    }
+  }, 80);
+
+  // Camera button toggle
+  document.querySelectorAll('.camera-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.camera-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+    });
+  });
+
+  // Model card toggle
+  document.querySelectorAll('.model-card').forEach(card => {
+    card.addEventListener('click', () => {
+      document.querySelectorAll('.model-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+    });
+  });
+
+  // Style tag toggle
+  document.querySelectorAll('.style-tag').forEach(tag => {
+    tag.addEventListener('click', () => tag.classList.toggle('active'));
+  });
+
+  // Iteration thumb toggle
+  document.querySelectorAll('.iter-thumb').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.iter-thumb').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+    });
+  });
+
+  // Right panel tabs
+  document.querySelectorAll('.right-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.right-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+    });
+  });
+
+  // Preview tabs
+  document.querySelectorAll('.preview-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.preview-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+    });
+  });
+</script>
+
+</body>
+</html>
