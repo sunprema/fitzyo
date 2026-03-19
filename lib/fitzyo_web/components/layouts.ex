@@ -73,6 +73,36 @@ defmodule FitzyoWeb.Layouts do
   end
 
   @doc """
+  Renders a full-screen workflow layout — no padding, no max-width.
+  Used by WorkflowLive so SvelteFlow can fill the viewport.
+  """
+  attr :flash, :map, required: true, doc: "the map of flash messages"
+
+  slot :inner_block, required: true
+
+  def workflow(assigns) do
+    ~H"""
+    <div class="workflow-shell">
+      <header class="workflow-topbar">
+        <a href="/" class="workflow-logo">
+          <img src={~p"/images/logo.svg"} width="28" />
+          <span>Fitzyo</span>
+        </a>
+        <div class="workflow-topbar-actions">
+          <.theme_toggle />
+        </div>
+      </header>
+
+      <div class="workflow-canvas-area">
+        {render_slot(@inner_block)}
+      </div>
+    </div>
+
+    <.flash_group flash={@flash} />
+    """
+  end
+
+  @doc """
   Shows the flash group with standard titles and content.
 
   ## Examples

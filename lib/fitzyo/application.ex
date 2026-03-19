@@ -7,10 +7,13 @@ defmodule Fitzyo.Application do
 
   @impl true
   def start(_type, _args) do
+    Fitzyo.Workflow.SuspendedReactors.init()
+
     children = [
       {NodeJS.Supervisor, [path: LiveSvelte.SSR.NodeJS.server_path(), pool_size: 4]},
       FitzyoWeb.Telemetry,
       Fitzyo.Repo,
+      Fitzyo.Workflow.NodeRegistry,
       {DNSCluster, query: Application.get_env(:fitzyo, :dns_cluster_query) || :ignore},
       {Oban,
        AshOban.config(

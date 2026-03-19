@@ -93,3 +93,10 @@ config :phoenix_live_view,
 
 # Disable swoosh api client as it is only required for production adapters.
 config :swoosh, :api_client, false
+
+# Stub ExAws credentials for local dev so it never hits the EC2 metadata service.
+# Real Tigris credentials come from environment variables in runtime.exs for prod.
+config :ex_aws,
+  access_key_id: "local-dev-key",
+  secret_access_key: "local-dev-secret",
+  region: "auto"

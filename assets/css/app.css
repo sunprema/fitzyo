@@ -105,3 +105,56 @@
 
 /* This file is for your main application CSS */
 @import "@xyflow/svelte/dist/style.css";
+
+/* ── Workflow full-screen layout ─────────────────────────────────────── */
+
+/* When the workflow shell is present, lock scroll on the root */
+html:has(.workflow-shell),
+html:has(.workflow-shell) body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+.workflow-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #0f0f14;
+  color: #e2e8f0;
+}
+
+.workflow-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 48px;
+  padding: 0 16px;
+  background: #13131a;
+  border-bottom: 1px solid #2a2a3a;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+.workflow-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  color: #e2e8f0;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.workflow-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.workflow-canvas-area {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+

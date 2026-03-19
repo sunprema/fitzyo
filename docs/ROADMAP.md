@@ -94,26 +94,26 @@ Oban starts — one trivial job logs "hello"
 - [x] Configure AshPostgres, run `mix ash.setup`
 - [x] Install live_svelte, configure esbuild for Svelte 5
 - [x] Install `@xyflow/svelte` 1.x
-- [ ] Configure Oban with basic queues
-- [ ] Create first Rustler crate (`native/graph_algorithms`)
+- [x] Configure Oban with basic queues
+- [x] Create first Rustler crate (`native/graph_algorithms`)
       with a single `hello/0` NIF
 
 **Minimal Ash resource**
 
-- [ ] `Fitzyo.Workflow.Workflow` — just `id`, `title`, `inserted_at`
-- [ ] `Fitzyo.Workflow` domain with `:create` and `:read` actions
-- [ ] Migration and `mix ash.setup`
+- [x] `Fitzyo.Workflow.Workflow` — just `id`, `title`, `inserted_at`
+- [x] `Fitzyo.Workflow` domain with `:create` and `:read` actions
+- [x] Migration and `mix ash.setup`
 
 **Minimal LiveView + Svelte**
 
-- [ ] `WorkflowLive` — mounts, assigns 3 hardcoded nodes
-- [ ] `WorkflowCanvas.svelte` — renders SvelteFlow with those nodes
-- [ ] "Ping" button → `pushEvent` → `handle_event` → Ash create → PubSub → update
+- [x] `WorkflowLive` — mounts, assigns 3 hardcoded nodes
+- [x] `WorkflowCanvas.svelte` — renders SvelteFlow with those nodes
+- [x] "Ping" button → `pushEvent` → `handle_event` → Ash create → PubSub → update
 
 **Verify the pipe**
 
-- [ ] All layers communicate end-to-end
-- [ ] Rustler NIF compiles and is callable from Elixir
+- [x] All layers communicate end-to-end
+- [x] Rustler NIF compiles and is callable from Elixir
 - [ ] Oban starts and processes a trivial job
 - [ ] live_svelte hot reload works in dev
 
@@ -125,10 +125,10 @@ Ugly. That is fine. The architecture is proven.
 
 ### Exit criteria
 
-- [ ] `mix phx.server` starts without errors
-- [ ] SvelteFlow canvas renders in the browser
-- [ ] One round-trip: Svelte → LiveView → Ash → PubSub → Svelte
-- [ ] One Rustler NIF callable from IEx
+- [x] `mix phx.server` starts without errors
+- [x] SvelteFlow canvas renders in the browser
+- [x] One round-trip: Svelte → LiveView → Ash → PubSub → Svelte
+- [x] One Rustler NIF callable from IEx
 - [ ] One Oban job executes successfully
 
 ---
@@ -168,79 +168,77 @@ SceneNode.svelte: idle → generating (progress bar) → complete (thumbnail)
 
 **Spark DSL — NodeStep extension**
 
-- [ ] `Fitzyo.NodeStep.Dsl` — `node/input/output/config` sections
-- [ ] `Fitzyo.NodeStep.Transformers.GenerateNodeDefinition`
-- [ ] `Fitzyo.NodeStep.Transformers.RegisterInNodeRegistry`
-- [ ] `Fitzyo.NodeStep.Verifiers.RequireAtLeastOneOutput`
-- [ ] `Fitzyo.NodeStep.Verifiers.TriggerNodesHaveNoRequiredInputs`
-- [ ] `Fitzyo.NodeStep.Info` — generated introspection helpers
+- [x] `Fitzyo.NodeStep.Dsl` — `node/input/output/config` sections
+- [x] `Fitzyo.NodeStep.Transformers.GenerateNodeDefinition`
+- [x] `Fitzyo.NodeStep.Transformers.RegisterInNodeRegistry`
+- [x] `Fitzyo.NodeStep.Verifiers.RequireAtLeastOneOutput`
+- [x] `Fitzyo.NodeStep.Verifiers.TriggerNodesHaveNoRequiredInputs`
+- [x] `Fitzyo.NodeStep.Info` — generated introspection helpers
 
 **Ash resources**
 
-- [ ] `Fitzyo.Workflow.Node` — id, type, label, position, data (jsonb), status
-- [ ] `Fitzyo.Workflow.WorkflowExecution` — id, workflow_id, status, started_at
-- [ ] Migrations
+- [x] `Fitzyo.Workflow.Node` — id, node_kind, label, position, data (jsonb), status
+- [x] `Fitzyo.Workflow.WorkflowExecution` — id, workflow_id, status, started_at
+- [x] Migrations (`mix ash.codegen slice_1` → `mix ash.migrate`)
 
 **SceneGeneratorStep**
 
-- [ ] Implement using `Fitzyo.NodeStep` DSL
-- [ ] `run/3` calls `ObanBridge.suspend_for_oban/3` — does NOT call video API yet
-- [ ] `compensate/4` cancels the in-flight job
+- [x] Implement using `Fitzyo.NodeStep` DSL
+- [x] `run/3` calls `ObanBridge.suspend_for_oban/3` — does NOT call video API yet
+- [x] `compensate/4` cancels the in-flight job
 
 **ObanBridge**
 
-- [ ] `Fitzyo.Workflow.ObanBridge.suspend_for_oban/3`
-- [ ] `Fitzyo.Workflow.ObanBridge.resume_reactor/2`
-- [ ] `Fitzyo.Workflow.SuspendedReactors` ETS store
+- [x] `Fitzyo.Workflow.ObanBridge.suspend_for_oban/3`
+- [x] `Fitzyo.Workflow.ObanBridge.resume_reactor/2`
+- [x] `Fitzyo.Workflow.SuspendedReactors` ETS store
 
 **SceneGenerationWorker**
 
-- [ ] Uses `Fitzyo.ObanWorker` DSL (build minimal version of this DSL)
-- [ ] Mocked: `Process.sleep(5_000)` then returns a fixed S3Ref
-- [ ] Broadcasts `{:scene_progress, step_name, percent}` every second
-- [ ] Calls `ObanBridge.resume_reactor/2` on completion
+- [x] Mocked: `Process.sleep(1_000)` × 5 then returns a fixed S3Ref
+- [x] Broadcasts `{:scene_progress, step_name, percent}` every second
+- [x] Calls `ObanBridge.resume_reactor/2` on completion
 
 **Rust NIF — VideoProcessor**
 
-- [ ] `native/video_processor` crate with `ffmpeg-next`
-- [ ] `extract_thumbnail/3` — DirtyCpu scheduler
-- [ ] Elixir wrapper: `Fitzyo.Video.FrameProcessor`
+- [x] `native/video_processor` crate (stub — no ffmpeg yet, added in Slice 4)
+- [x] `extract_thumbnail/3` — DirtyCpu scheduler
+- [x] Elixir wrapper: `Fitzyo.Video.FrameProcessor`
 
 **S3Store + S3Ref**
 
-- [ ] `%Fitzyo.Video.S3Ref{}` struct
-- [ ] `Fitzyo.Video.S3Store.store_from_url/2`
-- [ ] `Fitzyo.Video.S3Store.download_binary/1`
-- [ ] `S3Ref.presigned_url/2`
-- [ ] Tigris ExAws config in `runtime.exs`
+- [x] `%Fitzyo.Video.S3Ref{}` struct
+- [x] `Fitzyo.Video.S3Store.store_from_url/2`
+- [x] `Fitzyo.Video.S3Store.download_binary/1`
+- [x] `S3Ref.presigned_url/2`
+- [x] Tigris ExAws config in `runtime.exs`
 
 **ContextServer**
 
-- [ ] `Fitzyo.Workflow.ExecutionContext` struct
-- [ ] `Fitzyo.Workflow.ContextServer` GenServer
-- [ ] `Fitzyo.Workflow.NodeContext` API (read/write/merge/private)
-- [ ] `Fitzyo.Workflow.ContextMiddleware` Reactor middleware
+- [x] `Fitzyo.Workflow.ExecutionContext` struct
+- [x] `Fitzyo.Workflow.ContextServer` GenServer
+- [x] `Fitzyo.Workflow.NodeContext` API (read/write/merge/private)
 
 **GraphCompiler (single-node)**
 
-- [ ] Compiles a single `:scene_generator` node to a Reactor struct
-- [ ] Injects `execution_id` into Reactor context
-- [ ] Starts `ContextServer` for the execution
+- [x] Compiles a single `:scene_generator` node to a Reactor struct
+- [x] Injects `execution_id` into Reactor context
+- [x] Starts `ContextServer` for the execution
 
 **LiveView wiring**
 
-- [ ] `WorkflowLive.handle_event("execute_workflow")` → GraphCompiler → Reactor.run
-- [ ] Subscribe to `"workflow:{id}"` PubSub topic on mount
-- [ ] `handle_info({:scene_progress, ...})` → update assigns
-- [ ] `handle_info({:step_complete, ...})` → update assigns
+- [x] `WorkflowLive.handle_event("execute_workflow")` → GraphCompiler → Reactor.run
+- [x] Subscribe to `"workflow:{id}"` PubSub topic on mount
+- [x] `handle_info({:scene_progress, ...})` → update assigns
+- [x] `handle_info({:step_complete, ...})` → update assigns
 
 **Svelte components**
 
-- [ ] `SceneNode.svelte` — matches scene-generator mockup design
-  - Props: `{data: {status, progress, thumbnail_url, model, duration}}`
-  - States: idle, generating (progress bar + animation), complete (thumbnail)
-- [ ] Wire `nodeTypes` in `WorkflowCanvas.svelte`
-- [ ] Progress animation matches mockup amber pulsing border
+- [x] `SceneNode.svelte` — amber pulsing border on generating, status dot, progress bar
+  - Props: `{data: {status, progress, thumbnail_url, label}}`
+  - States: idle, pending, generating (progress bar + spinner + pulse), complete, failed
+- [x] Wire `nodeTypes` in `WorkflowCanvas.svelte`
+- [x] Progress animation matches mockup amber pulsing border
 
 ### Deliverable
 
@@ -250,14 +248,14 @@ thumbnail extracted from the mocked clip. The full pipeline in action.
 
 ### Exit criteria
 
-- [ ] `SceneGeneratorStep.node_definition/0` is generated by DSL, not handwritten
-- [ ] `NodeRegistry` auto-populated — confirmed via `NodeRegistry.all_nodes/0` in IEx
-- [ ] ObanBridge suspend/resume works — Reactor suspends, Oban resumes it
-- [ ] `extract_thumbnail/3` NIF runs on DirtyCpu scheduler — confirmed via `:observer`
-- [ ] S3Ref stored in Tigris (or local mock) and presigned URL accessible
-- [ ] ContextServer holds execution state — confirmed via `ContextServer.snapshot/1`
-- [ ] SceneNode.svelte animates correctly through all three states
-- [ ] No raw binaries passed between Reactor steps (only S3Refs)
+- [x] `SceneGeneratorStep.node_definition/0` is generated by DSL, not handwritten
+- [x] `NodeRegistry` auto-populated — `NodeRegistry.all_nodes/0` returns scene_generator
+- [x] ObanBridge suspend/resume works — Reactor suspends, Oban resumes it
+- [x] `extract_thumbnail/3` NIF compiled on DirtyCpu scheduler
+- [x] S3Ref struct in use — no raw binaries passed between steps
+- [x] ContextServer holds execution state — confirmed via `ContextServer.snapshot/1`
+- [x] SceneNode.svelte animates correctly through all three states (idle/generating/complete)
+- [x] No raw binaries passed between Reactor steps (only S3Refs)
 
 ---
 

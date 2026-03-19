@@ -12,7 +12,14 @@ config :ash_oban, pro?: false
 config :fitzyo, Oban,
   engine: Oban.Engines.Basic,
   notifier: Oban.Notifiers.Postgres,
-  queues: [default: 10],
+  queues: [
+    video_generation: 5,
+    asset_review: 10,
+    approvals: 50,
+    triggers: 20,
+    royalty_payouts: 5,
+    default: 10
+  ],
   repo: Fitzyo.Repo,
   plugins: [{Oban.Plugins.Cron, []}]
 
@@ -71,7 +78,7 @@ config :spark,
 config :fitzyo,
   ecto_repos: [Fitzyo.Repo],
   generators: [timestamp_type: :utc_datetime],
-  ash_domains: []
+  ash_domains: [Fitzyo.Workflow]
 
 # Configure the endpoint
 config :fitzyo, FitzyoWeb.Endpoint,

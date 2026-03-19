@@ -35,6 +35,7 @@ defmodule FitzyoWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+    live "/workflow", WorkflowLive
     live "/svelte", SvelteLive
     live "/xyflow", XYFlowLive
   end
