@@ -121,6 +121,7 @@ defmodule Fitzyo.MixProject do
       {:imprintor, "~> 0.1.0"},
       {:ex_aws, "~> 2.5"},
       {:ex_aws_s3, "~> 2.5"},
+      {:ffmpex, "~> 0.11"},
       {:live_agent,
        if(Mix.env() == :dev and File.dir?("/Volumes/x/projects/elixir_libs/live_agent"),
          do: [path: "/Volumes/x/projects/elixir_libs/live_agent", override: true, only: :dev],

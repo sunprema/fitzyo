@@ -38,13 +38,21 @@ defmodule Fitzyo.Workflow.Nodes.SceneGeneratorStep do
 
     ObanBridge.suspend_for_oban(context, step_name, Fitzyo.Workers.SceneGenerationWorker, %{
       "prompt" => arguments[:prompt],
-      "duration_seconds" => arguments[:duration_seconds] || 5,
-      "step_name" => step_name
+      "duration" => arguments[:duration_seconds] || 5,
+      "node_id" => to_string(step_name)
     })
   end
 
-  def compensate(_reason, _arguments, _context, _options) do
-    # TODO Slice 4: cancel in-flight Kling/Runway job
+  def compensate(_reason, arguments, context, _options) do
+    step_name = Map.get(context, :step_name, "unknown")
+    step_ref = "#{context[:execution_id]}:#{step_name}"
+
+    case Fitzyo.Workflow.SuspendedReactors.get_result(step_ref) do
+      {:ok, _} -> Fitzyo.Workflow.SuspendedReactors.delete_result(step_ref)
+      :not_found -> :ok
+    end
+
+    _ = arguments
     :ok
   end
 end

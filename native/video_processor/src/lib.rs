@@ -41,4 +41,36 @@ fn extract_thumbnail<'a>(
     (atoms::ok(), new_bin.into())
 }
 
+/// Probe basic metadata from a video binary.
+/// Returns `{:ok, json_binary}` where the JSON has keys: duration_s, width, height, codec.
+///
+/// Slice 4 stub: returns a fixed metadata JSON.
+/// Real implementation: parse MP4/WebM headers or call ffprobe.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn probe_video_metadata<'a>(
+    env: rustler::Env<'a>,
+    _video_binary: rustler::Binary<'a>,
+) -> (rustler::Atom, rustler::Binary<'a>) {
+    let placeholder = b"{\"duration_s\":5.0,\"width\":1280,\"height\":720,\"codec\":\"h264\"}";
+    let mut out = rustler::NewBinary::new(env, placeholder.len());
+    out.as_mut_slice().copy_from_slice(placeholder);
+    (atoms::ok(), out.into())
+}
+
+/// Generate a waveform amplitude array from audio in a video binary.
+/// Returns `{:ok, json_binary}` where the JSON is an array of floats in [0, 1].
+///
+/// Slice 4 stub: returns a 10-point flat waveform.
+#[rustler::nif(schedule = "DirtyCpu")]
+fn generate_waveform<'a>(
+    env: rustler::Env<'a>,
+    _video_binary: rustler::Binary<'a>,
+    _num_points: u32,
+) -> (rustler::Atom, rustler::Binary<'a>) {
+    let placeholder = b"[0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5]";
+    let mut out = rustler::NewBinary::new(env, placeholder.len());
+    out.as_mut_slice().copy_from_slice(placeholder);
+    (atoms::ok(), out.into())
+}
+
 rustler::init!("Elixir.Fitzyo.Video.FrameProcessor.Native");

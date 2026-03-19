@@ -10,7 +10,6 @@ defmodule Fitzyo.Application do
     Fitzyo.Workflow.SuspendedReactors.init()
 
     children = [
-      {NodeJS.Supervisor, [path: LiveSvelte.SSR.NodeJS.server_path(), pool_size: 4]},
       FitzyoWeb.Telemetry,
       Fitzyo.Repo,
       Fitzyo.Workflow.NodeRegistry,

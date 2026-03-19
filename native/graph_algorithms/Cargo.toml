@@ -9,3 +9,4 @@ name = "graph_algorithms"
 
 [dependencies]
 rustler = "0.36"
+petgraph = "0.6"

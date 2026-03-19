@@ -75,6 +75,8 @@ config :spark,
     ]
   ]
 
+config :live_svelte, ssr: false
+
 config :fitzyo,
   ecto_repos: [Fitzyo.Repo],
   generators: [timestamp_type: :utc_datetime],

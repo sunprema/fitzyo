@@ -20,6 +20,11 @@ defmodule FitzyoWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :video_webhook do
+    plug :accepts, ["json"]
+    plug FitzyoWeb.Plugs.VerifyVideoApiHmac
+  end
+
   scope "/gql" do
     pipe_through [:graphql]
 
@@ -35,15 +40,17 @@ defmodule FitzyoWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
-    live "/workflow", WorkflowLive
+    live "/workflow", WorkflowLive, :new
+    live "/workflow/:id", WorkflowLive, :edit
     live "/svelte", SvelteLive
     live "/xyflow", XYFlowLive
   end
 
-  # Other scopes may use custom stacks.
-  # scope "/api", FitzyoWeb do
-  #   pipe_through :api
-  # end
+  scope "/webhooks", FitzyoWeb do
+    pipe_through :video_webhook
+
+    post "/video/:provider", WebhookController, :video_callback
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:fitzyo, :dev_routes) do
@@ -76,5 +83,10 @@ defmodule FitzyoWeb.Router do
 
       ash_admin "/"
     end
+  end
+
+  if Application.compile_env(:fitzyo, :dev_routes) do
+    forward "/live_agent", LiveAgent.Plug
+    forward "/tidewave", Tidewave.Plug
   end
 end
