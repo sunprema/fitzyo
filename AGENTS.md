@@ -1,373 +1,1241 @@
-This is a web application written using the Phoenix web framework.
+Absolutely. For `AGENTS.md`, I would keep the focus on **product intent, architecture philosophy, user experience, and the role of WebMCP**, rather than implementation details. Your coding agent should understand _why FitzYo exists_ before deciding how to implement it.
+
+Here is a version you can put directly into the project root.
+
+# AGENTS.md
+
+# FitzYo — Agent Context
+
+## 1. What Is FitzYo?
+
+**FitzYo is an AI-native shopping experience where the user's personal context stays with the user, while retailers expose their products and commerce capabilities to AI agents through WebMCP.**
+
+The core idea is:
+
+> **Your AI knows you. The web doesn't have to.**
+
+FitzYo allows a user's AI agent to use private, user-controlled context such as:
+
+- Body measurements
+- Clothing sizes
+- Fit preferences
+- Favorite brands
+- Preferred colors
+- Style preferences
+- Activities and lifestyle
+- Existing wardrobe
+- Travel plans
+- Shopping budget
+- Family members and their preferences
+
+The AI agent uses this context to make shopping decisions.
 
-## Project guidelines
+The retailer does **not** need to maintain this personal profile.
 
-- Use `mix precommit` alias when you are done with all changes and fix any pending issues
-- Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
+Instead:
 
-### Phoenix v1.8 guidelines
+```text
+                 USER'S PRIVATE CONTEXT
+                         │
+                         ▼
+                  ┌─────────────┐
+                  │  AI Agent   │
+                  │             │
+                  │ Reasoning   │
+                  │ Planning    │
+                  │ Personal    │
+                  │ Context     │
+                  └──────┬──────┘
+                         │
+                       WebMCP
+                         │
+                         ▼
+              ┌─────────────────────┐
+              │   Retailer Website  │
+              │                     │
+              │ Products            │
+              │ Variants            │
+              │ Sizes               │
+              │ Inventory           │
+              │ Prices              │
+              │ Cart                │
+              │                     │
+              │ WebMCP Tools        │
+              └─────────────────────┘
+```
 
-- **Always** begin your LiveView templates with `<Layouts.app flash={@flash} ...>` which wraps all inner content
-- The `MyAppWeb.Layouts` module is aliased in the `my_app_web.ex` file, so you can use it without needing to alias it again
-- Anytime you run into errors with no `current_scope` assign:
-  - You failed to follow the Authenticated Routes guidelines, or you failed to pass `current_scope` to `<Layouts.app>`
-  - **Always** fix the `current_scope` error by moving your routes to the proper `live_session` and ensure you pass `current_scope` as needed
-- Phoenix v1.8 moved the `<.flash_group>` component to the `Layouts` module. You are **forbidden** from calling `<.flash_group>` outside of the `layouts.ex` module
-- Out of the box, `core_components.ex` imports an `<.icon name="hero-x-mark" class="w-5 h-5"/>` component for hero icons. **Always** use the `<.icon>` component for icons, **never** use `Heroicons` modules or similar
-- **Always** use the imported `<.input>` component for form inputs from `core_components.ex` when available. `<.input>` is imported and using it will save steps and prevent errors
-- If you override the default input classes (`<.input class="myclass px-2 py-1 rounded-lg">)`) class with your own values, no default classes are inherited, so your
-custom classes must fully style the input
+The agent supplies the **intent and personal context**.
 
-### JS and CSS guidelines
+The retailer supplies the **commerce capabilities and product data**.
+
+WebMCP is the interface between them.
+
+---
+
+# 2. The Problem
+
+Traditional ecommerce assumes that the retailer must know everything about the customer.
+
+A typical shopping experience looks like:
 
-- **Use Tailwind CSS classes and custom CSS rules** to create polished, responsive, and visually stunning interfaces.
-- Tailwindcss v4 **no longer needs a tailwind.config.js** and uses a new import syntax in `app.css`:
+```text
+User
+  ↓
+Search
+  ↓
+Filters
+  ↓
+Product pages
+  ↓
+Size chart
+  ↓
+Compare
+  ↓
+Add to cart
+  ↓
+Checkout
+```
+
+The user must manually translate their intent into dozens of UI interactions.
+
+For example:
 
-      @import "tailwindcss" source(none);
-      @source "../css";
-      @source "../js";
-      @source "../../lib/my_app_web";
+> "I'm going to Hawaii for seven days with my family. I need clothes for myself and my family, but I don't want to buy things we already own."
 
-- **Always use and maintain this import syntax** in the app.css file for projects generated with `phx.new`
-- **Never** use `@apply` when writing raw css
-- **Always** manually write your own tailwind-based components instead of using daisyUI for a unique, world-class design
-- Out of the box **only the app.js and app.css bundles are supported**
-  - You cannot reference an external vendor'd script `src` or link `href` in the layouts
-  - You must import the vendor deps into app.js and app.css to use them
-  - **Never write inline <script>custom js</script> tags within templates**
+Today, the user must manually:
 
-### UI/UX & design guidelines
+- Research Hawaii weather
+- Determine appropriate clothing
+- Remember everyone's sizes
+- Remember everyone's preferences
+- Search retailers
+- Filter products
+- Check sizes
+- Check colors
+- Compare products
+- Remember what is already in the wardrobe
+- Build outfits
+- Stay within budget
 
-- **Produce world-class UI designs** with a focus on usability, aesthetics, and modern design principles
-- Implement **subtle micro-interactions** (e.g., button hover effects, and smooth transitions)
-- Ensure **clean typography, spacing, and layout balance** for a refined, premium look
-- Focus on **delightful details** like hover effects, loading states, and smooth page transitions
+FitzYo changes this interaction model.
 
+The user should be able to tell their agent:
+
+> "We're going to Hawaii for seven days. Figure out what everyone needs and help me buy only what we're missing."
+
+The agent should reason about the task and use WebMCP-enabled retailers to execute the shopping workflow.
+
+---
 
-<!-- usage-rules-start -->
+# 3. The Core Product Model
+
+FitzYo separates responsibilities between three entities.
+
+## User
+
+Owns:
+
+- Personal information
+- Measurements
+- Preferences
+- Wardrobe
+- Family context
+- Travel context
+- Budget
+- Shopping intent
+
+## AI Agent
+
+Owns:
+
+- Reasoning
+- Planning
+- Personalization
+- Product discovery
+- Product comparison
+- Constraint satisfaction
+- Recommendation generation
+- Translating user intent into retailer operations
+
+## Retailer
+
+Owns:
+
+- Products
+- Product descriptions
+- Variants
+- Sizes
+- Colors
+- Prices
+- Inventory
+- Availability
+- Categories
+- Cart
+- Commerce operations
+
+The retailer should not need to understand the user's entire personal profile.
+
+---
+
+# 4. Why WebMCP Is Fundamental
+
+FitzYo is not simply an ecommerce application with an AI chatbot added to it.
+
+WebMCP is a fundamental part of the architecture.
+
+The retailer website exposes semantic capabilities such as:
+
+```text
+search_products()
+filter_products()
+get_product()
+get_variants()
+get_size_guide()
+find_matching_variants()
+compare_products()
+get_cart()
+add_to_cart()
+remove_from_cart()
+update_cart_item()
+focus_product()
+```
+
+The agent interacts with these **semantic commerce operations** rather than attempting to operate the website like a human through clicks.
+
+This distinction is critical.
+
+### Bad approach
+
+```text
+Agent
+ ↓
+Find button
+ ↓
+Click button
+ ↓
+Read DOM
+ ↓
+Click filter
+ ↓
+Read DOM
+ ↓
+Click product
+ ↓
+Read DOM
+```
+
+### FitzYo approach
+
+```text
+Agent
+ ↓
+search_products()
+ ↓
+filter_products()
+ ↓
+find_matching_variants()
+ ↓
+compare_products()
+ ↓
+add_to_cart()
+```
+
+The website becomes an **agent-accessible commerce environment**.
+
+---
+
+# 5. Human + Agent Interaction
+
+FitzYo should not create two separate experiences.
+
+There should be:
+
+```text
+                ONE APPLICATION STATE
+                       │
+              ┌────────┴────────┐
+              │                 │
+           HUMAN             AGENT
+              │                 │
+              └────────┬────────┘
+                       │
+                 Shared State
+                       │
+                       ▼
+                 Retail UI
+```
+
+The human and agent operate on the same application state.
+
+If the agent filters products:
+
+```text
+Agent
+  ↓
+filter_products(...)
+  ↓
+Application State
+  ↓
+UI updates
+```
 
-<!-- phoenix:elixir-start -->
-## Elixir guidelines
+The human immediately sees the filtered products.
+
+If the human changes the filter:
+
+```text
+Human
+  ↓
+UI interaction
+  ↓
+Application State
+  ↓
+Agent observes updated state
+```
+
+This bidirectional relationship is important.
+
+The agent should never feel like it is operating a hidden application.
+
+---
 
-- Elixir lists **do not support index based access via the access syntax**
+# 6. The Signature FitzYo Experience
 
-  **Never do this (invalid)**:
+The most important demonstration scenario is:
 
-      i = 0
-      mylist = ["blue", "green"]
-      mylist[i]
+> **"We're going to Hawaii for seven days. What should my family wear?"**
 
-  Instead, **always** use `Enum.at`, pattern matching, or `List` for index based list access, ie:
+The agent should be able to combine:
 
-      i = 0
-      mylist = ["blue", "green"]
-      Enum.at(mylist, i)
+### Private context
 
-- Elixir variables are immutable, but can be rebound, so for block expressions like `if`, `case`, `cond`, etc
-  you *must* bind the result of the expression to a variable if you want to use it and you CANNOT rebind the result inside the expression, ie:
+Example:
 
-      # INVALID: we are rebinding inside the `if` and the result never gets assigned
-      if connected?(socket) do
-        socket = assign(socket, :val, val)
-      end
+```text
+Dad:
+  Size: XL
+  Waist: 36
+  Preferred brands: Patagonia, Columbia
+  Colors: Blue, Black
+  Avoid: Red
+  Style: Casual
 
-      # VALID: we rebind the result of the `if` to a new variable
-      socket =
-        if connected?(socket) do
-          assign(socket, :val, val)
-        end
+Mom:
+  Size: M
+  Preferred colors: ...
 
-- **Never** nest multiple modules in the same file as it can cause cyclic dependencies and compilation errors
-- **Never** use map access syntax (`changeset[:field]`) on structs as they do not implement the Access behaviour by default. For regular structs, you **must** access the fields directly, such as `my_struct.field` or use higher level APIs that are available on the struct if they exist, `Ecto.Changeset.get_field/2` for changesets
-- Elixir's standard library has everything necessary for date and time manipulation. Familiarize yourself with the common `Time`, `Date`, `DateTime`, and `Calendar` interfaces by accessing their documentation as necessary. **Never** install additional dependencies unless asked or for date/time parsing (which you can use the `date_time_parser` package)
-- Don't use `String.to_atom/1` on user input (memory leak risk)
-- Predicate function names should not start with `is_` and should end in a question mark. Names like `is_thing` should be reserved for guards
-- Elixir's builtin OTP primitives like `DynamicSupervisor` and `Registry`, require names in the child spec, such as `{DynamicSupervisor, name: MyApp.MyDynamicSup}`, then you can use `DynamicSupervisor.start_child(MyApp.MyDynamicSup, child_spec)`
-- Use `Task.async_stream(collection, callback, options)` for concurrent enumeration with back-pressure. The majority of times you will want to pass `timeout: :infinity` as option
+Child:
+  Size: Youth L
+  ...
+```
 
-## Mix guidelines
+### Existing wardrobe
 
-- Read the docs and options before using tasks (by using `mix help task_name`)
-- To debug test failures, run tests in a specific file with `mix test test/my_test.exs` or run all previously failed tests with `mix test --failed`
-- `mix deps.clean --all` is **almost never needed**. **Avoid** using it unless you have good reason
+```text
+Dad:
+  3 t-shirts
+  2 shorts
+  1 swim trunk
 
-## Test guidelines
+Mom:
+  ...
 
-- **Always use `start_supervised!/1`** to start processes in tests as it guarantees cleanup between tests
-- **Avoid** `Process.sleep/1` and `Process.alive?/1` in tests
-  - Instead of sleeping to wait for a process to finish, **always** use `Process.monitor/1` and assert on the DOWN message:
+Child:
+  ...
+```
 
-      ref = Process.monitor(pid)
-      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+### Trip context
 
-   - Instead of sleeping to synchronize before the next call, **always** use `_ = :sys.get_state/1` to ensure the process has handled prior messages
-<!-- phoenix:elixir-end -->
+```text
+Destination: Hawaii
+Duration: 7 days
+Activities:
+  Beach
+  Hiking
+  Dinner
+  Sightseeing
+```
 
-<!-- phoenix:phoenix-start -->
-## Phoenix guidelines
+### Retail inventory
 
-- Remember Phoenix router `scope` blocks include an optional alias which is prefixed for all routes within the scope. **Always** be mindful of this when creating routes within a scope to avoid duplicate module prefixes.
+Provided through WebMCP:
 
-- You **never** need to create your own `alias` for route definitions! The `scope` provides the alias, ie:
+```text
+Products
+Variants
+Sizes
+Colors
+Prices
+Availability
+```
 
-      scope "/admin", AppWeb.Admin do
-        pipe_through :browser
+The agent combines all of these inputs.
 
-        live "/users", UserLive, :index
-      end
+It should produce something like:
 
-  the UserLive route would point to the `AppWeb.Admin.UserLive` module
+```text
+HAWAII — 7 DAY WARDROBE
 
-- `Phoenix.View` no longer is needed or included with Phoenix, don't use it
-<!-- phoenix:phoenix-end -->
+Dad
 
+Already have:
+✓ 3 casual shirts
+✓ 2 shorts
+✓ 1 swim trunk
 
-<!-- phoenix:html-start -->
-## Phoenix HTML guidelines
+Need:
+• 2 lightweight shirts
+• 1 hiking short
+• 1 lightweight dinner shirt
 
-- Phoenix templates **always** use `~H` or .html.heex files (known as HEEx), **never** use `~E`
-- **Always** use the imported `Phoenix.Component.form/1` and `Phoenix.Component.inputs_for/1` function to build forms. **Never** use `Phoenix.HTML.form_for` or `Phoenix.HTML.inputs_for` as they are outdated
-- When building forms **always** use the already imported `Phoenix.Component.to_form/2` (`assign(socket, form: to_form(...))` and `<.form for={@form} id="msg-form">`), then access those forms in the template via `@form[:field]`
-- **Always** add unique DOM IDs to key elements (like forms, buttons, etc) when writing templates, these IDs can later be used in tests (`<.form for={@form} id="product-form">`)
-- For "app wide" template imports, you can import/alias into the `my_app_web.ex`'s `html_helpers` block, so they will be available to all LiveViews, LiveComponent's, and all modules that do `use MyAppWeb, :html` (replace "my_app" by the actual app name)
+Retailer search:
+✓ Blue Columbia shirt — XL
+✓ Black Patagonia hiking short — 36
+✓ Blue linen shirt — XL
 
-- Elixir supports `if/else` but **does NOT support `if/else if` or `if/elsif`**. **Never use `else if` or `elseif` in Elixir**, **always** use `cond` or `case` for multiple conditionals.
+Estimated additional cost: $184
+```
 
-  **Never do this (invalid)**:
+The important part is that the retailer does not need to know why the agent selected those products.
 
-      <%= if condition do %>
-        ...
-      <% else if other_condition %>
-        ...
-      <% end %>
+The agent owns that reasoning.
 
-  Instead **always** do this:
+---
 
-      <%= cond do %>
-        <% condition -> %>
-          ...
-        <% condition2 -> %>
-          ...
-        <% true -> %>
-          ...
-      <% end %>
+# 7. FitzYo's "Fit" Concept
 
-- HEEx require special tag annotation if you want to insert literal curly's like `{` or `}`. If you want to show a textual code snippet on the page in a `<pre>` or `<code>` block you *must* annotate the parent tag with `phx-no-curly-interpolation`:
+The name **FitzYo** represents personalized fit.
 
-      <code phx-no-curly-interpolation>
-        let obj = {key: "val"}
-      </code>
+Fit should be treated as more than just a size.
 
-  Within `phx-no-curly-interpolation` annotated tags, you can use `{` and `}` without escaping them, and dynamic Elixir expressions can still be used with `<%= ... %>` syntax
+A product can expose structured fit information such as:
 
-- HEEx class attrs support lists, but you must **always** use list `[...]` syntax. You can use the class list syntax to conditionally add classes, **always do this for multiple class values**:
+```text
+Size: XL
 
-      <a class={[
-        "px-2 text-white",
-        @some_flag && "py-5",
-        if(@other_condition, do: "border-red-500", else: "border-blue-100"),
-        ...
-      ]}>Text</a>
+Chest: 44–46"
+Waist: 36–38"
+Fit: Relaxed
+Length: Regular
+Stretch: Medium
+Cut: Athletic
+```
 
-  and **always** wrap `if`'s inside `{...}` expressions with parens, like done above (`if(@other_condition, do: "...", else: "...")`)
+The user's private profile may contain:
 
-  and **never** do this, since it's invalid (note the missing `[` and `]`):
+```text
+Chest: 45"
+Waist: 36"
+Preferred fit: Relaxed
+```
 
-      <a class={
-        "px-2 text-white",
-        @some_flag && "py-5"
-      }> ...
-      => Raises compile syntax error on invalid HEEx attr syntax
+The agent can reason:
 
-- **Never** use `<% Enum.each %>` or non-for comprehensions for generating template content, instead **always** use `<%= for item <- @collection do %>`
-- HEEx HTML comments use `<%!-- comment --%>`. **Always** use the HEEx HTML comment syntax for template comments (`<%!-- comment --%>`)
-- HEEx allows interpolation via `{...}` and `<%= ... %>`, but the `<%= %>` **only** works within tag bodies. **Always** use the `{...}` syntax for interpolation within tag attributes, and for interpolation of values within tag bodies. **Always** interpolate block constructs (if, cond, case, for) within tag bodies using `<%= ... %>`.
+```text
+User measurements
+        +
+Product measurements
+        +
+Fit preference
+        ↓
+     FIT MATCH
+```
 
-  **Always** do this:
+The retailer should expose the information required for this reasoning.
 
-      <div id={@id}>
-        {@my_assign}
-        <%= if @some_block_condition do %>
-          {@another_assign}
-        <% end %>
-      </div>
+The retailer does not need to permanently store the user's body profile.
 
-  and **Never** do this – the program will terminate with a syntax error:
+---
 
-      <%!-- THIS IS INVALID NEVER EVER DO THIS --%>
-      <div id="<%= @invalid_interpolation %>">
-        {if @invalid_block_construct do}
-        {end}
-      </div>
-<!-- phoenix:html-end -->
+# 8. "Fits Dad" UX
 
-<!-- phoenix:liveview-start -->
-## Phoenix LiveView guidelines
+One of the signature UI concepts should be contextual personalization.
 
-- **Never** use the deprecated `live_redirect` and `live_patch` functions, instead **always** use the `<.link navigate={href}>` and  `<.link patch={href}>` in templates, and `push_navigate` and `push_patch` functions LiveViews
-- **Avoid LiveComponent's** unless you have a strong, specific need for them
-- LiveViews should be named like `AppWeb.WeatherLive`, with a `Live` suffix. When you go to add LiveView routes to the router, the default `:browser` scope is **already aliased** with the `AppWeb` module, so you can just do `live "/weather", WeatherLive`
+Instead of:
 
-### LiveView streams
+> XL available
 
-- **Always** use LiveView streams for collections for assigning regular lists to avoid memory ballooning and runtime termination with the following operations:
-  - basic append of N items - `stream(socket, :messages, [new_msg])`
-  - resetting stream with new items - `stream(socket, :messages, [new_msg], reset: true)` (e.g. for filtering items)
-  - prepend to stream - `stream(socket, :messages, [new_msg], at: -1)`
-  - deleting items - `stream_delete(socket, :messages, msg)`
+the interface can show:
 
-- When using the `stream/3` interfaces in the LiveView, the LiveView template must 1) always set `phx-update="stream"` on the parent element, with a DOM id on the parent element like `id="messages"` and 2) consume the `@streams.stream_name` collection and use the id as the DOM id for each child. For a call like `stream(socket, :messages, [new_msg])` in the LiveView, the template would be:
+> **Fits Dad ✓**
 
-      <div id="messages" phx-update="stream">
-        <div :for={{id, msg} <- @streams.messages} id={id}>
-          {msg.text}
-        </div>
-      </div>
+or:
 
-- LiveView streams are *not* enumerable, so you cannot use `Enum.filter/2` or `Enum.reject/2` on them. Instead, if you want to filter, prune, or refresh a list of items on the UI, you **must refetch the data and re-stream the entire stream collection, passing reset: true**:
+> **Likely fits Dad**
 
-      def handle_event("filter", %{"filter" => filter}, socket) do
-        # re-fetch the messages based on the filter
-        messages = list_messages(filter)
+This information is generated from the user's private context and current agent task.
 
-        {:noreply,
-         socket
-         |> assign(:messages_empty?, messages == [])
-         # reset the stream with the new messages
-         |> stream(:messages, messages, reset: true)}
-      end
+The retailer itself does not need to know who "Dad" is.
 
-- LiveView streams *do not support counting or empty states*. If you need to display a count, you must track it using a separate assign. For empty states, you can use Tailwind classes:
+Conceptually:
 
-      <div id="tasks" phx-update="stream">
-        <div class="hidden only:block">No tasks yet</div>
-        <div :for={{id, task} <- @streams.tasks} id={id}>
-          {task.name}
-        </div>
-      </div>
+```text
+Retail Product
+      +
+Private Family Context
+      +
+Agent Reasoning
+      ↓
+"Fits Dad"
+```
 
-  The above only works if the empty state is the only HTML block alongside the stream for-comprehension.
+This should feel magical to a human user while remaining technically understandable.
 
-- When updating an assign that should change content inside any streamed item(s), you MUST re-stream the items
-  along with the updated assign:
+---
 
-      def handle_event("edit_message", %{"message_id" => message_id}, socket) do
-        message = Chat.get_message!(message_id)
-        edit_form = to_form(Chat.change_message(message, %{content: message.content}))
+# 9. Privacy Model
 
-        # re-insert message so @editing_message_id toggle logic takes effect for that stream item
-        {:noreply,
-         socket
-         |> stream_insert(:messages, message)
-         |> assign(:editing_message_id, String.to_integer(message_id))
-         |> assign(:edit_form, edit_form)}
-      end
+Privacy is an architectural benefit, but it is not the only product proposition.
 
-  And in the template:
+The primary proposition is:
 
-      <div id="messages" phx-update="stream">
-        <div :for={{id, message} <- @streams.messages} id={id} class="flex group">
-          {message.username}
-          <%= if @editing_message_id == message.id do %>
-            <%!-- Edit mode --%>
-            <.form for={@edit_form} id="edit-form-#{message.id}" phx-submit="save_edit">
-              ...
-            </.form>
-          <% end %>
-        </div>
-      </div>
+> **Your AI knows what fits you. The web doesn't have to.**
 
-- **Never** use the deprecated `phx-update="append"` or `phx-update="prepend"` for collections
+FitzYo should minimize the amount of personal information sent to retailers.
 
-### LiveView JavaScript interop
+For example, the retailer may receive:
 
-- Remember anytime you use `phx-hook="MyHook"` and that JS hook manages its own DOM, you **must** also set the `phx-update="ignore"` attribute
-- **Always** provide an unique DOM id alongside `phx-hook` otherwise a compiler error will be raised
+```text
+size = XL
+color = blue
+fit = relaxed
+```
 
-LiveView hooks come in two flavors, 1) colocated js hooks for "inline" scripts defined inside HEEx,
-and 2) external `phx-hook` annotations where JavaScript object literals are defined and passed to the `LiveSocket` constructor.
+It does not need to receive:
 
-#### Inline colocated js hooks
+```text
+name
+age
+body measurements
+family relationships
+entire wardrobe
+travel history
+personal preferences
+```
 
-**Never** write raw embedded `<script>` tags in heex as they are incompatible with LiveView.
-Instead, **always use a colocated js hook script tag (`:type={Phoenix.LiveView.ColocatedHook}`)
-when writing scripts inside the template**:
+unless those details are genuinely required for the current operation.
 
-    <input type="text" name="user[phone_number]" id="user-phone-number" phx-hook=".PhoneNumber" />
-    <script :type={Phoenix.LiveView.ColocatedHook} name=".PhoneNumber">
-      export default {
-        mounted() {
-          this.el.addEventListener("input", e => {
-            let match = this.el.value.replace(/\D/g, "").match(/^(\d{3})(\d{3})(\d{4})$/)
-            if(match) {
-              this.el.value = `${match[1]}-${match[2]}-${match[3]}`
-            }
-          })
-        }
-      }
-    </script>
+The general principle is:
 
-- colocated hooks are automatically integrated into the app.js bundle
-- colocated hooks names **MUST ALWAYS** start with a `.` prefix, i.e. `.PhoneNumber`
+> **Share task-relevant constraints, not the user's entire profile.**
 
-#### External phx-hook
+Do not build a centralized FitzYo customer-profile backend for the MVP.
 
-External JS hooks (`<div id="myhook" phx-hook="MyHook">`) must be placed in `assets/js/` and passed to the
-LiveSocket constructor:
+The user's personal context should remain outside the retailer application.
 
-    const MyHook = {
-      mounted() { ... }
-    }
-    let liveSocket = new LiveSocket("/live", Socket, {
-      hooks: { MyHook }
-    });
+---
 
-#### Pushing events between client and server
+# 10. Local Personal Context
 
-Use LiveView's `push_event/3` when you need to push events/data to the client for a phx-hook to handle.
-**Always** return or rebind the socket on `push_event/3` when pushing events:
+For the MVP, personal context can be represented using local files.
 
-    # re-bind socket so we maintain event state to be pushed
-    socket = push_event(socket, "my_event", %{...})
+For example:
 
-    # or return the modified socket directly:
-    def handle_event("some_event", _, socket) do
-      {:noreply, push_event(socket, "my_event", %{...})}
-    end
+```text
+FAMILY.md
+```
 
-Pushed events can then be picked up in a JS hook with `this.handleEvent`:
+Possible structure:
 
-    mounted() {
-      this.handleEvent("my_event", data => console.log("from server:", data));
-    }
+```markdown
+# Family
 
-Clients can also push an event to the server and receive a reply with `this.pushEvent`:
+## Dad
 
-    mounted() {
-      this.el.addEventListener("click", e => {
-        this.pushEvent("my_event", { one: 1 }, reply => console.log("got reply from server:", reply));
-      })
-    }
+### Measurements
 
-Where the server handled it via:
+- Shirt: XL
+- Waist: 36
+- Inseam: 32
 
-    def handle_event("my_event", %{"one" => 1}, socket) do
-      {:reply, %{two: 2}, socket}
-    end
+### Preferences
 
-### LiveView tests
+- Preferred brands: Patagonia, Columbia
+- Preferred colors: Blue, Black
+- Avoid: Red
+- Preferred fit: Relaxed
 
-- `Phoenix.LiveViewTest` module and `LazyHTML` (included) for making your assertions
-- Form tests are driven by `Phoenix.LiveViewTest`'s `render_submit/2` and `render_change/2` functions
-- Come up with a step-by-step test plan that splits major test cases into small, isolated files. You may start with simpler tests that verify content exists, gradually add interaction tests
-- **Always reference the key element IDs you added in the LiveView templates in your tests** for `Phoenix.LiveViewTest` functions like `element/2`, `has_element/2`, selectors, etc
-- **Never** tests again raw HTML, **always** use `element/2`, `has_element/2`, and similar: `assert has_element?(view, "#my-form")`
-- Instead of relying on testing text content, which can change, favor testing for the presence of key elements
-- Focus on testing outcomes rather than implementation details
-- Be aware that `Phoenix.Component` functions like `<.form>` might produce different HTML than expected. Test against the output HTML structure, not your mental model of what you expect it to be
-- When facing test failures with element selectors, add debug statements to print the actual HTML, but use `LazyHTML` selectors to limit the output, ie:
+## Mom
 
-      html = render(view)
-      document = LazyHTML.from_fragment(html)
-      matches = LazyHTML.filter(document, "your-complex-selector")
-      IO.inspect(matches, label: "Matches")
+...
+
+## Child
+
+...
+```
+
+Wardrobe can be maintained separately or in the same local context:
+
+```markdown
+# Wardrobe
+
+## Dad
+
+- Blue polo
+- Black shorts
+- Gray t-shirt
+- Navy swim trunks
+
+## Mom
+
+...
+
+## Child
+
+...
+```
+
+The MVP does not need a sophisticated personal-data backend.
+
+The important architectural concept is:
+
+```text
+Private context belongs to the user/agent.
+Commerce data belongs to the retailer.
+```
+
+---
+
+# 11. Retailer UX Philosophy
+
+The retailer should look like a normal modern ecommerce application.
+
+It should not look like an "AI demo."
+
+Humans should be able to use it normally.
+
+At the same time, every important commerce concept should be semantically accessible to an agent.
+
+For example:
+
+```text
+Product
+Variant
+Size
+Color
+Price
+Availability
+Fit
+Category
+Filter
+Cart Item
+```
+
+should all have stable identifiers and structured representations.
+
+The UI and WebMCP layer should operate on the same underlying application state.
+
+---
+
+# 12. Semantic Commerce Objects
+
+Do not design WebMCP tools around DOM elements.
+
+Bad:
+
+```text
+click_filter_button()
+click_product_card()
+click_size_dropdown()
+```
+
+Good:
+
+```text
+filter_products({
+  category: "shirts",
+  size: "XL",
+  color: "blue",
+  fit: "relaxed"
+})
+```
+
+The WebMCP layer should operate on domain objects and domain operations.
+
+The implementation should look conceptually like:
+
+```text
+WebMCP Tool
+     ↓
+Domain Operation
+     ↓
+Application State
+     ↓
+LiveView/Svelte UI
+```
+
+not:
+
+```text
+WebMCP Tool
+     ↓
+DOM manipulation
+```
+
+---
+
+# 13. Important Product Capabilities
+
+The MVP retailer should support:
+
+### Discovery
+
+- Store information
+- Categories
+- Product search
+
+### Filtering
+
+- Category
+- Size
+- Color
+- Brand
+- Price
+- Fit
+- Activity
+
+### Product information
+
+- Product details
+- Variants
+- Sizes
+- Size guide
+- Availability
+- Fit information
+
+### Personalization
+
+- Matching variants to user constraints
+- "Fits Dad"
+- Family contextual labels
+
+### Comparison
+
+- Compare multiple products
+
+### Cart
+
+- View cart
+- Add item
+- Remove item
+- Update quantity/variant
+
+### UI navigation
+
+- Focus product
+- Focus filter
+
+---
+
+# 14. Agent-Friendly State
+
+The application should have one canonical state model.
+
+Conceptually:
+
+```text
+ApplicationState
+├── searchQuery
+├── category
+├── filters
+├── results
+├── selectedProduct
+├── selectedVariant
+├── comparisonProducts
+└── cart
+```
+
+WebMCP operations modify this state.
+
+The UI renders this state.
+
+The agent can inspect this state through appropriate read-only tools.
+
+Avoid maintaining separate "agent state" and "human state."
+
+---
+
+# 15. Agent Activity Should Be Visible
+
+For the hackathon/demo, the user should be able to see what the agent is doing.
+
+For example:
+
+```text
+FITZYO AGENT
+
+✓ Read family preferences
+✓ Checked existing wardrobe
+✓ Created Hawaii wardrobe plan
+✓ Searching retailer
+✓ Filtering for Dad — XL
+✓ Filtering for blue / black
+✓ Checking available variants
+✓ Comparing 3 shirts
+✓ Added 2 items to cart
+```
+
+This is not intended to expose internal chain-of-thought.
+
+It is a high-level action/status log showing **what operations the agent performed**.
+
+The user should remain in control.
+
+---
+
+# 16. Human Override
+
+The human always has the final say.
+
+The agent can:
+
+- Search
+- Filter
+- Inspect
+- Compare
+- Recommend
+- Add items to cart
+
+The agent should not automatically:
+
+- Complete payment
+- Place an irreversible order
+- Make high-impact purchases without confirmation
+
+The desired interaction is:
+
+```text
+Agent recommends
+      ↓
+Human reviews
+      ↓
+Human modifies if desired
+      ↓
+Human confirms
+```
+
+---
+
+# 17. What FitzYo Is NOT
+
+Do not turn FitzYo into:
+
+- A traditional ecommerce marketplace
+- A retailer CRM
+- A centralized customer-profile database
+- A generic AI chatbot
+- A recommendation chatbot sitting beside an ecommerce website
+- A browser automation framework
+- A DOM-clicking agent
+- A payment platform
+- A social shopping network
+
+The product is specifically about:
+
+> **Personal AI context + agent-native commerce interfaces.**
+
+---
+
+# 18. MVP Scope
+
+The MVP should prioritize the WebMCP experience over production ecommerce complexity.
+
+### Must Have
+
+- Retail product catalog
+- Product search
+- Structured filters
+- Product variants
+- Size/fit information
+- Cart
+- WebMCP tools
+- Shared human/agent state
+- Local family context
+- Agent-driven shopping workflow
+- "Fits [family member]" contextual UI
+- Agent activity panel
+
+### Not Required
+
+- Real payment processing
+- Real fulfillment
+- Complex authentication
+- Real retailer integrations
+- Loyalty programs
+- Advertising
+- Production-grade inventory management
+- Multi-retailer federation
+- Automatic purchasing
+
+The MVP should be a convincing **agent-native retail prototype**, not a complete ecommerce platform.
+
+---
+
+# 19. Technical Philosophy
+
+FitzYo should favor simple, explicit architecture.
+
+Preferred stack:
+
+```text
+Elixir
+Phoenix
+Phoenix LiveView
+Ash Framework
+Svelte where complex interactive UI is useful
+WebMCP
+```
+
+Use the existing Phoenix application state as the source of truth.
+
+Avoid introducing infrastructure unless it directly improves the demo or product architecture.
+
+Prefer:
+
+```text
+Domain model
+    ↓
+Application state
+    ↓
+WebMCP
+    ↓
+UI
+```
+
+over unnecessary layers.
+
+---
+
+# 20. Architecture
+
+The conceptual architecture is:
+
+```text
+┌──────────────────────────────────────────────┐
+│              USER ENVIRONMENT                │
+│                                              │
+│  Family Context                              │
+│  FAMILY.md                                   │
+│  Wardrobe                                    │
+│  Preferences                                 │
+│  Travel Plans                                │
+│                                              │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+              ┌─────────────────┐
+              │    AI AGENT     │
+              │                 │
+              │ Understand      │
+              │ Plan            │
+              │ Reason          │
+              │ Personalize     │
+              └────────┬────────┘
+                       │
+                       │ WebMCP
+                       ▼
+┌──────────────────────────────────────────────┐
+│              RETAILER WEBSITE                │
+│                                              │
+│  ┌────────────────────────────────────────┐  │
+│  │           WebMCP Layer                 │  │
+│  │                                        │  │
+│  │ search_products                       │  │
+│  │ filter_products                       │  │
+│  │ get_product                           │  │
+│  │ get_variants                          │  │
+│  │ find_matching_variants                │  │
+│  │ compare_products                      │  │
+│  │ get_cart                              │  │
+│  │ add_to_cart                            │  │
+│  └──────────────────┬─────────────────────┘  │
+│                     │                        │
+│                     ▼                        │
+│             Commerce Domain                  │
+│                     │                        │
+│                     ▼                        │
+│              Application State              │
+│                     │                        │
+│             ┌───────┴────────┐               │
+│             ▼                ▼               │
+│         LiveView           Svelte            │
+│             │                │               │
+│             └───────┬────────┘               │
+│                     ▼                        │
+│                HUMAN UI                      │
+│                                              │
+└──────────────────────────────────────────────┘
+```
+
+---
+
+# 21. The Most Important Design Rule
+
+### WebMCP tools must represent what the user wants to accomplish, not how the UI happens to implement it.
+
+For example:
+
+```text
+filter_products()
+```
+
+is good.
+
+```text
+click_checkbox_17()
+```
+
+is fundamentally wrong.
+
+Likewise:
+
+```text
+add_to_cart(product_id, variant_id)
+```
+
+is good.
+
+```text
+click_add_button_at_coordinates()
+```
+
+is wrong.
+
+This principle should guide all WebMCP API design.
+
+---
+
+# 22. Demo Story
+
+The primary demo should feel like this:
+
+### Step 1
+
+User opens FitzYo.
+
+### Step 2
+
+User's agent has access to the user's private family context.
+
+### Step 3
+
+User says:
+
+> "We're going to Hawaii for seven days. Plan what everyone should wear and find what we're missing."
+
+### Step 4
+
+Agent reasons over:
+
+```text
+Family
++
+Wardrobe
++
+Trip
++
+Activities
++
+Weather/context
++
+Budget
+```
+
+### Step 5
+
+Agent uses WebMCP to interact with the retailer.
+
+```text
+search_products()
+filter_products()
+find_matching_variants()
+compare_products()
+```
+
+### Step 6
+
+The retailer UI visibly changes.
+
+The user sees:
+
+```text
+Fits Dad ✓
+Fits Mom ✓
+Fits Child ✓
+```
+
+### Step 7
+
+Agent builds a recommendation.
+
+### Step 8
+
+Agent adds selected items to the cart.
+
+### Step 9
+
+User can modify the constraints:
+
+> "Keep it under $500."
+
+or:
+
+> "Dad doesn't need another shirt."
+
+or:
+
+> "No red."
+
+The agent responds by modifying the same retailer state through WebMCP.
+
+### Step 10
+
+Human reviews the final cart.
+
+The human remains in control of purchase.
+
+---
+
+# 23. The Fundamental Value Proposition
+
+Traditional ecommerce:
+
+```text
+Retailer knows products.
+User manually figures out what to buy.
+```
+
+FitzYo:
+
+```text
+User's AI knows the user.
+Retailer knows products.
+WebMCP connects the two.
+```
+
+This creates a new interaction model:
+
+```text
+USER INTENT
+     ↓
+AI REASONING
+     ↓
+WEBMCP
+     ↓
+COMMERCE CAPABILITIES
+     ↓
+LIVE RETAIL UI
+     ↓
+HUMAN APPROVAL
+```
+
+---
+
+# 24. Long-Term Vision
+
+The MVP is apparel, but the underlying model is broader.
+
+Eventually FitzYo could become a personal commerce agent that works across:
+
+- Apparel
+- Shoes
+- Travel
+- Outdoor equipment
+- Home goods
+- Gifts
+- Family shopping
+- Event preparation
+- Seasonal shopping
+
+The user's personal context could include:
+
+```text
+Identity
+Measurements
+Preferences
+Wardrobe
+Calendar
+Travel
+Activities
+Budget
+Past purchases
+Wishlist
+Household
+```
+
+The agent could then perform tasks such as:
+
+> "I'm going to Colorado next month."
+
+> "My son needs clothes for soccer season."
+
+> "We have a wedding in October."
+
+> "Find gifts for my parents."
+
+> "Prepare our family for a week at the beach."
+
+The same architecture applies:
+
+```text
+Personal Context
+       +
+User Intent
+       +
+AI Reasoning
+       +
+WebMCP-enabled Commerce
+```
+
+---
+
+# 25. Guiding Principle for Coding Agents
+
+When implementing FitzYo, always ask:
+
+> **Does this feature make the interaction between a human, their AI agent, and the web meaningfully better?**
+
+Prefer features that strengthen this relationship.
+
+Avoid building conventional ecommerce features simply because they are common in ecommerce applications.
+
+The objective is not to build another online clothing store.
+
+The objective is to demonstrate what happens when:
+
+> **The user's AI can directly interact with a website through meaningful, structured capabilities while the human remains in control.**
+
+---
+
+# 26. Final Product Definition
+
+FitzYo is:
+
+> **An agent-native shopping experience where users bring their own personal context and AI, while retailers expose structured commerce capabilities through WebMCP.**
+
+The three parties have clear ownership:
+
+```text
+USER
+Owns personal context.
+
+AI AGENT
+Owns reasoning and planning.
+
+RETAILER
+Owns products and commerce.
+
+WEBMCP
+Connects them.
+```
+
+The core promise is:
+
+> **Your AI knows what fits you. The web doesn't have to.**
+
+This is the version I'd give the coding agent **before** the more technical `RETAIL_UX_REQUIREMENTS.md` and `WEBMCP_SPEC.md`. It establishes the _why_ first, then those documents can define the _how_.
+
+## Document References
+
+- [Retail UX Requirements](@docs/RETAIL_UX_REQUIREMENTS.md)
+- [WEB MCP Spec](@docs/WEBMCP_SPEC.md)

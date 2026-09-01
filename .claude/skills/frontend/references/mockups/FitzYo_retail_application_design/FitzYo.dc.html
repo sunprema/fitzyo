@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="./image-slot.js"></script>
+  <style>
+    body { margin: 0; }
+    @keyframes fitzyo-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+    @keyframes fitzyo-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</helmet>
+
+<div style="display:flex;flex-direction:column;min-height:100vh;background:#F6FBF8;font-family:'DM Sans',sans-serif;color:#1E2B24">
+
+  <!-- HEADER -->
+  <header style="display:flex;align-items:center;gap:24px;height:72px;padding:0 32px;background:#FFFFFF;border-bottom:1px solid #DCEEE3;position:sticky;top:0;z-index:20;flex-shrink:0">
+    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <div style="width:32px;height:32px;border-radius:10px;background:#4FAE7E;display:flex;align-items:center;justify-content:center;color:#fff;font-family:'Fredoka',sans-serif;font-weight:700;font-size:16px">Fz</div>
+      <span style="font-family:'Fredoka',sans-serif;font-weight:700;font-size:22px;color:#2F7857">FitzYo</span>
+    </div>
+    <form onSubmit="{{ onSearchSubmit }}" style="flex:1;max-width:480px;display:flex;align-items:center;gap:8px;background:#EAF7F0;border:1px solid #DCEEE3;border-radius:999px;padding:0 16px;height:42px">
+      <span style="font-size:16px;color:#5C6E64" aria-hidden="true">⌕</span>
+      <input id="store-search-input" type="text" value="{{ searchInput }}" onChange="{{ onSearchChange }}" placeholder="Search products..." aria-label="Search products" style="flex:1;border:none;background:transparent;outline:none;font-family:'DM Sans',sans-serif;font-size:14px;color:#1E2B24" />
+      <button type="submit" style="border:none;background:#4FAE7E;color:#fff;font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;padding:8px 16px;border-radius:999px;cursor:pointer">Search</button>
+    </form>
+    <div style="flex:1"></div>
+    <div title="{{ agentStatusTitle }}" style="display:flex;align-items:center;gap:8px;background:#EAF7F0;border:1px solid #DCEEE3;border-radius:999px;padding:6px 14px;flex-shrink:0">
+      <span style="width:8px;height:8px;border-radius:50%;background:#4FAE7E;animation:fitzyo-pulse 2s ease-in-out infinite"></span>
+      <span style="font-size:12px;font-weight:600;color:#2F7857">Agent Connected</span>
+    </div>
+    <button onClick="{{ onToggleCart }}" aria-label="Open cart" style="position:relative;border:1px solid #DCEEE3;background:#FFFFFF;border-radius:999px;padding:8px 16px;display:flex;align-items:center;gap:8px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;font-size:13px;color:#1E2B24;flex-shrink:0">
+      <span aria-hidden="true">🛍</span> Cart
+      <sc-if value="{{ hasCartItems }}">
+        <span style="position:absolute;top:-6px;right:-6px;background:#FF8A65;color:#fff;font-size:11px;font-weight:700;border-radius:999px;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;padding:0 4px">{{ cartCount }}</span>
+      </sc-if>
+    </button>
+  </header>
+
+  <!-- BODY -->
+  <div style="display:flex;flex:1;min-height:0">
+
+    <!-- SIDEBAR FILTERS -->
+    <aside style="width:220px;min-width:220px;flex-shrink:0;padding:16px;border-right:1px solid #DCEEE3;background:#FFFFFF;overflow-y:auto">
+
+      <div style="background:#EAF7F0;border:1px solid #D6EFDF;border-radius:14px;padding:14px;margin-bottom:20px">
+        <div style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#2F7857;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px">✦ Dad's Private Context</div>
+        <div style="font-size:12px;color:#5C6E64;line-height:1.5;margin-bottom:10px">Shirt 16.5/34 · Navy/Gray · Columbia, Patagonia · under $70</div>
+        <button onClick="{{ onApplyDadProfile }}" style="width:100%;border:none;background:#4FAE7E;color:#fff;font-weight:600;font-size:12px;padding:9px;border-radius:10px;cursor:pointer">Apply Dad's Fit as Filters</button>
+      </div>
+
+      <div style="margin-bottom:22px">
+        <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#5C6E64;margin:0 0 10px">Category</h3>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <sc-for list="{{ categoryOptions }}" as="opt" hint-placeholder-count="4">
+            <button id="filter-category-{{ opt.value }}" data-filter-type="category" data-filter-value="{{ opt.value }}" onClick="{{ opt.onClick }}" style="display:flex;align-items:center;justify-content:space-between;text-align:left;border:none;background:{{ opt.bg }};color:{{ opt.color }};font-weight:{{ opt.weight }};font-size:13px;padding:9px 10px;border-radius:8px;cursor:pointer">
+              <span>{{ opt.label }}</span><span style="color:#8B9C92;font-weight:500">{{ opt.count }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+      <sc-if value="{{ sizeOptions.length }}" hint-placeholder-val="{{ 0 }}">
+        <div style="margin-bottom:22px">
+          <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#5C6E64;margin:0 0 10px">Size</h3>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            <sc-for list="{{ sizeOptions }}" as="opt" hint-placeholder-count="6">
+              <button id="filter-size-{{ opt.id }}" data-filter-type="size" data-filter-value="{{ opt.value }}" onClick="{{ opt.onClick }}" style="border:1px solid {{ opt.border }};background:{{ opt.bg }};color:{{ opt.color }};font-weight:600;font-size:12px;padding:6px 10px;border-radius:8px;cursor:pointer">{{ opt.value }}</button>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="margin-bottom:22px">
+        <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#5C6E64;margin:0 0 10px">Color</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <sc-for list="{{ colorOptions }}" as="opt" hint-placeholder-count="7">
+            <button id="filter-color-{{ opt.value }}" data-filter-type="color" data-filter-value="{{ opt.value }}" onClick="{{ opt.onClick }}" aria-label="{{ opt.label }}" title="{{ opt.label }}" style="width:30px;height:30px;border-radius:50%;background:{{ opt.swatch }};border:{{ opt.border }};cursor:pointer;box-shadow:{{ opt.ring }}"></button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="margin-bottom:22px">
+        <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#5C6E64;margin:0 0 10px">Brand</h3>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <sc-for list="{{ brandOptions }}" as="opt" hint-placeholder-count="5">
+            <label id="filter-brand-{{ opt.id }}" data-filter-type="brand" data-filter-value="{{ opt.value }}" style="display:flex;align-items:center;gap:8px;font-size:13px;color:#1E2B24;cursor:pointer">
+              <input type="checkbox" checked="{{ opt.checked }}" onChange="{{ opt.onClick }}" style="accent-color:#4FAE7E;width:15px;height:15px" />{{ opt.label }}
+            </label>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="margin-bottom:22px">
+        <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#5C6E64;margin:0 0 10px">Price</h3>
+        <div style="display:flex;align-items:center;gap:8px">
+          <input type="number" min="0" placeholder="Min" value="{{ minPriceInput }}" onChange="{{ onMinPriceChange }}" style="width:70px;border:1px solid #DCEEE3;border-radius:8px;padding:7px 8px;font-size:13px;font-family:'DM Sans',sans-serif" />
+          <span style="color:#8B9C92">–</span>
+          <input type="number" min="0" placeholder="Max" value="{{ maxPriceInput }}" onChange="{{ onMaxPriceChange }}" style="width:70px;border:1px solid #DCEEE3;border-radius:8px;padding:7px 8px;font-size:13px;font-family:'DM Sans',sans-serif" />
+        </div>
+      </div>
+
+      <div style="margin-bottom:22px">
+        <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#5C6E64;margin:0 0 10px">Fit</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <sc-for list="{{ fitOptions }}" as="opt" hint-placeholder-count="4">
+            <button id="filter-fit-{{ opt.value }}" data-filter-type="fit" data-filter-value="{{ opt.value }}" onClick="{{ opt.onClick }}" style="border:1px solid {{ opt.border }};background:{{ opt.bg }};color:{{ opt.color }};font-weight:600;font-size:12px;padding:6px 10px;border-radius:999px;cursor:pointer;text-transform:capitalize">{{ opt.value }}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#5C6E64;margin:0 0 10px">Activity</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          <sc-for list="{{ activityOptions }}" as="opt" hint-placeholder-count="7">
+            <button id="filter-activity-{{ opt.value }}" data-filter-type="activity" data-filter-value="{{ opt.value }}" onClick="{{ opt.onClick }}" style="border:1px solid {{ opt.border }};background:{{ opt.bg }};color:{{ opt.color }};font-weight:600;font-size:12px;padding:6px 10px;border-radius:999px;cursor:pointer;text-transform:capitalize">{{ opt.value }}</button>
+          </sc-for>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main style="flex:1;min-width:280px;overflow-y:auto;padding:20px 16px">
+
+      <sc-if value="{{ isStoreView }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px">
+            <h1 style="font-family:'Fredoka',sans-serif;font-size:22px;font-weight:600;margin:0;color:#1E2B24">{{ resultsHeading }}</h1>
+            <span style="font-size:13px;color:#5C6E64">{{ resultsCountLabel }}</span>
+          </div>
+
+          <sc-if value="{{ hasActiveFilters }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:14px 0 4px">
+              <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#8B9C92">Active:</span>
+              <sc-for list="{{ activeFilterChips }}" as="chip" hint-placeholder-count="3">
+                <button onClick="{{ chip.onRemove }}" style="display:flex;align-items:center;gap:6px;background:#FFF1EA;color:#E86A45;border:1px solid #FFD9C4;border-radius:999px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer">{{ chip.label }} <span aria-hidden="true">×</span></button>
+              </sc-for>
+              <button onClick="{{ onClearAllFilters }}" style="border:none;background:none;color:#5C6E64;font-size:12px;text-decoration:underline;cursor:pointer">Clear all</button>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ loading }}" hint-placeholder-val="{{ false }}">
+            <div style="animation:fitzyo-pulse 1.2s ease-in-out infinite;color:#5C6E64;font-size:13px;font-weight:600;margin:24px 0">Searching…</div>
+          </sc-if>
+
+          <sc-if value="{{ showEmptyState }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#FFFFFF;border:1px solid #DCEEE3;border-radius:16px;padding:32px;margin-top:20px;text-align:center">
+              <div style="font-size:15px;font-weight:700;margin-bottom:10px">No products found</div>
+              <div style="font-size:13px;color:#5C6E64;margin-bottom:14px">Current requirements: {{ emptyStateRequirements }}</div>
+              <div style="font-size:13px;color:#5C6E64">Try: increase your budget, remove a brand restriction, or try another color.</div>
+              <button onClick="{{ onClearAllFilters }}" style="margin-top:16px;border:none;background:#4FAE7E;color:#fff;font-weight:600;font-size:13px;padding:9px 18px;border-radius:999px;cursor:pointer">Clear filters</button>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ showGrid }}" hint-placeholder-val="{{ true }}">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));gap:14px;margin-top:16px">
+              <sc-for list="{{ results }}" as="p" hint-placeholder-count="8">
+                <article id="product-{{ p.id }}" data-product-id="{{ p.id }}" data-product-name="{{ p.title }}" data-brand="{{ p.brand }}" data-category="{{ p.category }}" style="background:#FFFFFF;border:1px solid #DCEEE3;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;cursor:pointer;animation:fitzyo-fade 0.25s ease" onClick="{{ p.onOpen }}">
+                  <div style="position:relative;width:100%;aspect-ratio:1/1">
+                    <image-slot id="{{ p.imgId }}" shape="rect" placeholder="{{ p.title }}"></image-slot>
+                    <sc-if value="{{ p.isDadMatch }}" hint-placeholder-val="{{ false }}">
+                      <div style="position:absolute;top:8px;left:8px;background:#FF8A65;color:#fff;font-size:10px;font-weight:700;padding:4px 8px;border-radius:999px">✦ FitzYo Match</div>
+                    </sc-if>
+                  </div>
+                  <div style="padding:14px;display:flex;flex-direction:column;gap:4px;flex:1">
+                    <span style="font-size:11px;font-weight:700;color:#4FAE7E;text-transform:uppercase;letter-spacing:0.03em">{{ p.brand }}</span>
+                    <span style="font-size:14px;font-weight:600;color:#1E2B24;line-height:1.3">{{ p.title }}</span>
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+                      <span style="font-size:14px;font-weight:700;color:#1E2B24">{{ p.priceLabel }}</span>
+                      <div style="display:flex;gap:4px">
+                        <sc-for list="{{ p.swatches }}" as="sw" hint-placeholder-count="3">
+                          <span style="width:14px;height:14px;border-radius:50%;background:{{ sw.color }};border:1px solid #DCEEE3"></span>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- PRODUCT DETAIL -->
+      <sc-if value="{{ isDetailView }}" hint-placeholder-val="{{ false }}">
+        <div style="animation:fitzyo-fade 0.2s ease">
+          <button onClick="{{ onBackToResults }}" style="border:none;background:none;color:#4FAE7E;font-weight:600;font-size:13px;cursor:pointer;padding:0;margin-bottom:16px">← Back to results</button>
+          <div style="display:grid;grid-template-columns:minmax(180px,1fr) minmax(220px,1.3fr);gap:24px;align-items:start">
+            <div style="aspect-ratio:1/1;border-radius:20px;overflow:hidden">
+              <image-slot id="{{ detail.imgId }}" shape="rounded" radius="20" placeholder="{{ detail.title }}"></image-slot>
+            </div>
+            <div id="product-{{ detail.id }}" data-product-id="{{ detail.id }}" data-brand="{{ detail.brand }}" data-category="{{ detail.category }}">
+              <div style="font-size:12px;font-weight:700;color:#4FAE7E;text-transform:uppercase;letter-spacing:0.04em">{{ detail.brand }}</div>
+              <h1 style="font-family:'Fredoka',sans-serif;font-size:28px;font-weight:600;margin:6px 0 10px;color:#1E2B24">{{ detail.title }}</h1>
+              <div style="font-size:22px;font-weight:700;color:#1E2B24;margin-bottom:14px">{{ detail.priceLabel }}</div>
+              <p style="font-size:14px;color:#5C6E64;line-height:1.6;margin:0 0 20px">{{ detail.description }}</p>
+
+              <sc-if value="{{ detail.matchInfo.any }}" hint-placeholder-val="{{ false }}">
+                <div style="background:#FFF1EA;border:1px solid #FFD9C4;border-radius:14px;padding:14px;margin-bottom:20px">
+                  <div style="font-size:12px;font-weight:700;color:#E86A45;margin-bottom:8px">✦ FitzYo Match — Dad</div>
+                  <div style="display:flex;flex-direction:column;gap:4px;font-size:13px;color:#4A3B33">
+                    <span>Size {{ detail.selectedSize }} {{ detail.matchInfo.sizeMark }}</span>
+                    <span>{{ detail.selectedColorLabel }} {{ detail.matchInfo.colorMark }}</span>
+                    <span>{{ detail.brand }} {{ detail.matchInfo.brandMark }}</span>
+                  </div>
+                </div>
+              </sc-if>
+
+              <div style="margin-bottom:18px">
+                <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#5C6E64;margin-bottom:8px">Color</div>
+                <div style="display:flex;gap:10px">
+                  <sc-for list="{{ detail.colorChoices }}" as="c" hint-placeholder-count="3">
+                    <button id="variant-{{ detail.id }}-{{ c.value }}" data-product-id="{{ detail.id }}" data-color="{{ c.value }}" onClick="{{ c.onClick }}" aria-label="{{ c.label }}" title="{{ c.label }}" style="width:34px;height:34px;border-radius:50%;background:{{ c.swatch }};border:{{ c.border }};cursor:pointer;box-shadow:{{ c.ring }}"></button>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="margin-bottom:18px">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                  <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#5C6E64">Size</span>
+                  <button onClick="{{ onToggleSizeGuide }}" style="border:none;background:none;color:#4FAE7E;font-size:12px;font-weight:600;cursor:pointer">Size guide</button>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                  <sc-for list="{{ detail.sizeChoices }}" as="s" hint-placeholder-count="5">
+                    <button id="variant-{{ detail.id }}-{{ detail.selectedColor }}-{{ s.id }}" data-product-id="{{ detail.id }}" data-variant-id="{{ s.variantId }}" data-color="{{ detail.selectedColor }}" data-size="{{ s.value }}" data-available="{{ s.availableStr }}" onClick="{{ s.onClick }}" disabled="{{ s.disabled }}" style="border:1px solid {{ s.border }};background:{{ s.bg }};color:{{ s.color }};font-weight:600;font-size:13px;padding:8px 14px;border-radius:8px;cursor:{{ s.cursor }};text-decoration:{{ s.strike }}">{{ s.value }}</button>
+                  </sc-for>
+                </div>
+              </div>
+
+              <sc-if value="{{ showSizeGuide }}" hint-placeholder-val="{{ false }}">
+                <table style="width:100%;border-collapse:collapse;margin-bottom:18px;font-size:12px">
+                  <thead><tr><sc-for list="{{ detail.sizeGuide.headers }}" as="h" hint-placeholder-count="4"><th style="text-align:left;padding:6px 8px;border-bottom:2px solid #DCEEE3;color:#5C6E64">{{ h }}</th></sc-for></tr></thead>
+                  <tbody>
+                    <sc-for list="{{ detail.sizeGuide.rows }}" as="row" hint-placeholder-count="4">
+                      <tr>
+                        <sc-for list="{{ row }}" as="cell" hint-placeholder-count="4"><td style="padding:6px 8px;border-bottom:1px solid #EAF7F0">{{ cell }}</td></sc-for>
+                      </tr>
+                    </sc-for>
+                  </tbody>
+                </table>
+              </sc-if>
+
+              <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:22px;font-size:13px;color:#5C6E64">
+                <span><strong style="color:#1E2B24">Fit:</strong> {{ detail.fit }}</span>
+                <span><strong style="color:#1E2B24">Material:</strong> {{ detail.material }}</span>
+                <span><strong style="color:#1E2B24">Activities:</strong> {{ detail.activitiesLabel }}</span>
+              </div>
+
+              <button onClick="{{ detail.onAddToCart }}" disabled="{{ detail.addDisabled }}" style="width:100%;border:none;background:{{ detail.addBtnBg }};color:#fff;font-weight:700;font-size:15px;padding:14px;border-radius:12px;cursor:{{ detail.addBtnCursor }}">{{ detail.addBtnLabel }}</button>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </main>
+
+    <!-- AGENT ACTIVITY PANEL -->
+    <aside style="width:{{ agentPanelWidth }};flex-shrink:0;border-left:1px solid #DCEEE3;background:#F6FBF8;overflow:hidden;transition:width 0.2s ease;display:flex;flex-direction:column">
+      <sc-if value="{{ agentPanelOpen }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;height:100%;min-width:240px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;border-bottom:1px solid #DCEEE3">
+            <span style="font-size:13px;font-weight:700;color:#2F7857">✦ Agent Activity</span>
+            <button onClick="{{ onToggleAgentPanel }}" aria-label="Collapse agent panel" style="border:none;background:none;color:#5C6E64;cursor:pointer;font-size:13px">›</button>
+          </div>
+          <div style="flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+            <sc-for list="{{ activityLog }}" as="entry" hint-placeholder-count="4">
+              <div style="animation:fitzyo-fade 0.2s ease">
+                <div style="font-family:'DM Sans',monospace;font-size:11px;color:#2F7857;font-weight:700">✓ {{ entry.call }}</div>
+                <div style="font-size:11px;color:#5C6E64;margin-top:2px">{{ entry.result }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:12px 16px;border-top:1px solid #DCEEE3;display:flex;align-items:center;gap:8px">
+            <span style="width:7px;height:7px;border-radius:50%;background:#4FAE7E;animation:fitzyo-pulse 2s ease-in-out infinite"></span>
+            <span style="font-size:11px;color:#5C6E64">Agent connected — actions log as WebMCP calls</span>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ agentPanelCollapsed }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ onToggleAgentPanel }}" aria-label="Expand agent panel" style="width:100%;height:100%;border:none;background:none;color:#5C6E64;cursor:pointer;writing-mode:vertical-rl;font-size:12px;font-weight:600">✦ Agent Activity ‹</button>
+      </sc-if>
+    </aside>
+  </div>
+
+  <!-- CART DRAWER -->
+  <sc-if value="{{ cartOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ onToggleCart }}" style="position:fixed;inset:0;background:rgba(30,43,36,0.35);z-index:40"></div>
+    <div style="position:fixed;top:0;right:0;bottom:0;width:400px;background:#FFFFFF;box-shadow:-8px 0 24px rgba(30,43,36,0.12);z-index:41;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:20px;border-bottom:1px solid #DCEEE3">
+        <h2 style="font-family:'Fredoka',sans-serif;font-size:18px;margin:0">Cart</h2>
+        <button onClick="{{ onToggleCart }}" aria-label="Close cart" style="border:none;background:none;font-size:18px;cursor:pointer;color:#5C6E64">×</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:14px">
+        <sc-if value="{{ hasCartItems }}" hint-placeholder-val="{{ false }}">
+          <sc-for list="{{ cartItems }}" as="item" hint-placeholder-count="2">
+            <div id="cart-item-{{ item.productId }}" style="display:flex;gap:12px;border-bottom:1px solid #EAF7F0;padding-bottom:14px">
+              <div style="width:64px;height:64px;border-radius:10px;overflow:hidden;flex-shrink:0">
+                <image-slot id="{{ item.imgId }}" shape="rect" placeholder="{{ item.title }}"></image-slot>
+              </div>
+              <div style="flex:1">
+                <div style="font-size:11px;font-weight:700;color:#4FAE7E;text-transform:uppercase">{{ item.persona }}</div>
+                <div style="font-size:13px;font-weight:600">{{ item.title }}</div>
+                <div style="font-size:12px;color:#5C6E64">{{ item.colorLabel }} / {{ item.size }}</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+                  <span style="font-size:13px;font-weight:700">{{ item.lineTotal }}</span>
+                  <button onClick="{{ item.onRemove }}" style="border:none;background:none;color:#E86A45;font-size:12px;cursor:pointer">Remove</button>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+        </sc-if>
+        <sc-if value="{{ hasCartItems }}" hint-placeholder-val="{{ true }}">
+          <div style="text-align:center;color:#8B9C92;font-size:13px;padding:40px 0">Your cart is empty.</div>
+        </sc-if>
+      </div>
+      <div style="padding:20px;border-top:1px solid #DCEEE3">
+        <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;margin-bottom:14px"><span>Subtotal</span><span>{{ cartSubtotalLabel }}</span></div>
+        <button onClick="{{ onCheckout }}" disabled="{{ checkoutDisabled }}" style="width:100%;border:none;background:{{ checkoutBtnBg }};color:#fff;font-weight:700;font-size:14px;padding:14px;border-radius:12px;cursor:{{ checkoutBtnCursor }}">Review &amp; Approve Checkout</button>
+        <div style="font-size:11px;color:#8B9C92;text-align:center;margin-top:8px">Human approval required — the agent cannot check out for you.</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- CHECKOUT CONFIRMATION -->
+  <sc-if value="{{ orderConfirmed }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;inset:0;background:rgba(30,43,36,0.45);z-index:50;display:flex;align-items:center;justify-content:center">
+      <div style="background:#FFFFFF;border-radius:20px;padding:36px;max-width:380px;text-align:center">
+        <div style="width:56px;height:56px;border-radius:50%;background:#EAF7F0;color:#4FAE7E;font-size:28px;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">✓</div>
+        <h2 style="font-family:'Fredoka',sans-serif;font-size:20px;margin:0 0 8px">Order confirmed</h2>
+        <p style="font-size:13px;color:#5C6E64;margin:0 0 20px">Human approval received. This is a demo — no payment was processed.</p>
+        <button onClick="{{ onCloseConfirmation }}" style="border:none;background:#4FAE7E;color:#fff;font-weight:700;font-size:14px;padding:12px 24px;border-radius:999px;cursor:pointer">Done</button>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    products: [], data: null,
+    searchInput: "", searchQuery: "",
+    category: null,
+    filters: { brands: [], colors: [], sizes: [], fits: [], activities: [], minPrice: null, maxPrice: null },
+    selectedProductId: null, selectedColor: null, selectedSize: null, showSizeGuide: false,
+    cart: [], cartOpen: false, orderConfirmed: false,
+    activityLog: [], agentPanelOpen: false, loading: false
+  };
+
+  async componentDidMount() {
+    const mod = await import("./fitzyo-data.js");
+    this.data = mod;
+    this.setState({ products: mod.PRODUCTS });
+    this.log("get_store_info()", "FitzYo Store — 40 products, 4 categories");
+    this.log("get_categories()", "shirts, pants, shoes, outerwear");
+  }
+
+  log(call, result) {
+    this.setState(s => ({ activityLog: [...s.activityLog, { id: Math.random().toString(36).slice(2), call, result }].slice(-30) }));
+  }
+
+  simulateLoad() {
+    this.setState({ loading: true });
+    clearTimeout(this._loadTimer);
+    this._loadTimer = setTimeout(() => this.setState({ loading: false }), 260);
+  }
+
+  onSearchChange = (e) => this.setState({ searchInput: e.target.value });
+  onSearchSubmit = (e) => {
+    e.preventDefault();
+    this.setState({ searchQuery: this.state.searchInput });
+    this.simulateLoad();
+    setTimeout(() => this.log(`search_products("${this.state.searchInput}")`, `${this.getResults().length} products found`), 270);
+  };
+
+  toggleCategory = (cat) => {
+    this.setState(s => ({ category: s.category === cat ? null : cat, filters: { ...s.filters, sizes: [] } }));
+    this.simulateLoad();
+    this.log(`filter_products({category: ${JSON.stringify(cat)}})`, "results updated");
+  };
+
+  toggleArrayFilter = (type, value) => {
+    this.setState(s => {
+      const arr = s.filters[type];
+      const next = arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value];
+      return { filters: { ...s.filters, [type]: next } };
+    });
+    this.simulateLoad();
+    setTimeout(() => this.log(`filter_products({${type}: [...]})`, `${this.getResults().length} products found`), 270);
+  };
+
+  setMinPrice = (e) => { const v = e.target.value ? Number(e.target.value) : null; this.setState(s => ({ filters: { ...s.filters, minPrice: v } })); this.log(`filter_products({min_price: ${v}})`, "results updated"); };
+  setMaxPrice = (e) => { const v = e.target.value ? Number(e.target.value) : null; this.setState(s => ({ filters: { ...s.filters, maxPrice: v } })); this.log(`filter_products({max_price: ${v}})`, "results updated"); };
+
+  clearAllFilters = () => {
+    this.setState({ category: null, filters: { brands: [], colors: [], sizes: [], fits: [], activities: [], minPrice: null, maxPrice: null } });
+    this.log("clear_filters()", "all filters cleared");
+  };
+
+  applyDadProfile = () => {
+    if (!this.data) return;
+    const D = this.data.DAD_PROFILE;
+    this.setState({ category: "shirts", filters: { brands: [...D.brands], colors: [...D.colors], sizes: [D.shirtSize], fits: [], activities: [], minPrice: null, maxPrice: D.maxPrice } });
+    this.simulateLoad();
+    setTimeout(() => this.log(`find_matching_variants({size:"${D.shirtSize}", color:["navy","gray"], brand:["Columbia","Patagonia"], max_price:${D.maxPrice}})`, "Private context applied as store filters"), 270);
+  };
+
+  getResults() {
+    const s = this.state;
+    let list = s.products;
+    if (s.category) list = list.filter(p => p.category === s.category);
+    if (s.searchQuery.trim()) {
+      const q = s.searchQuery.toLowerCase();
+      list = list.filter(p => p.title.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q) || p.category.includes(q));
+    }
+    const f = s.filters;
+    if (f.brands.length) list = list.filter(p => f.brands.includes(p.brand));
+    if (f.colors.length) list = list.filter(p => p.colors.some(c => f.colors.includes(c)));
+    if (f.sizes.length) list = list.filter(p => p.sizes.some(sz => f.sizes.includes(sz)));
+    if (f.fits.length) list = list.filter(p => f.fits.includes(p.fit));
+    if (f.activities.length) list = list.filter(p => p.activities.some(a => f.activities.includes(a)));
+    if (f.minPrice != null) list = list.filter(p => p.price >= f.minPrice);
+    if (f.maxPrice != null) list = list.filter(p => p.price <= f.maxPrice);
+    return list;
+  }
+
+  isDadMatch(p) {
+    if (!this.data) return false;
+    const D = this.data.DAD_PROFILE;
+    const sizeField = p.category === "shirts" ? D.shirtSize : p.category === "pants" ? D.pantsSize : p.category === "shoes" ? D.shoeSize : D.outerwearSize;
+    return D.brands.includes(p.brand) && p.colors.some(c => D.colors.includes(c)) && p.sizes.includes(sizeField) && p.price <= D.maxPrice;
+  }
+
+  selectProduct = (id) => {
+    const p = this.state.products.find(x => x.id === id);
+    if (!p) return;
+    this.setState({ selectedProductId: id, selectedColor: p.colors[0], selectedSize: p.sizes[0], showSizeGuide: false });
+    this.log(`get_product("${id}")`, `${p.title} — ${p.colors.length} colors, ${p.sizes.length} sizes`);
+  };
+  backToResults = () => this.setState({ selectedProductId: null });
+  toggleSizeGuide = () => this.setState(s => ({ showSizeGuide: !s.showSizeGuide }));
+
+  pickColor = (c) => { this.setState({ selectedColor: c }); this.log(`select_variant({color:"${c}"})`, "human override — selection updated"); };
+  pickSize = (s, disabled) => {
+    if (disabled) return;
+    this.setState({ selectedSize: s });
+    this.log(`select_variant({size:"${s}"})`, "human override — selection updated");
+  };
+
+  addToCart = (p) => {
+    const s = this.state;
+    if (s.selectedSize && p.unavailableSizes && p.unavailableSizes.includes(s.selectedSize)) {
+      this.log("add_to_cart(...)", `error VARIANT_UNAVAILABLE — ${s.selectedColor} / ${s.selectedSize} is currently unavailable.`);
+      return;
+    }
+    this.setState(state => {
+      const idx = state.cart.findIndex(i => i.productId === p.id && i.color === s.selectedColor && i.size === s.selectedSize);
+      let cart;
+      if (idx >= 0) { cart = [...state.cart]; cart[idx] = { ...cart[idx], qty: cart[idx].qty + 1 }; }
+      else cart = [...state.cart, { productId: p.id, color: s.selectedColor, size: s.selectedSize, qty: 1 }];
+      return { cart, cartOpen: true };
+    });
+    this.log(`add_to_cart("${p.id}", variant:"${s.selectedColor}/${s.selectedSize}")`, "Cart updated");
+  };
+
+  removeFromCart = (idx) => {
+    this.setState(s => ({ cart: s.cart.filter((_, i) => i !== idx) }));
+    this.log("remove_from_cart(...)", "Cart updated");
+  };
+
+  toggleCart = () => this.setState(s => ({ cartOpen: !s.cartOpen }));
+  toggleAgentPanel = () => this.setState(s => ({ agentPanelOpen: !s.agentPanelOpen }));
+
+  checkout = () => {
+    if (!this.state.cart.length) return;
+    this.setState({ orderConfirmed: true });
+    this.log("checkout_confirmed()", "Human reviewed and approved checkout");
+  };
+  closeConfirmation = () => this.setState({ orderConfirmed: false, cart: [], cartOpen: false });
+
+  colorSwatch(c) {
+    const map = { black: "#2A2A2A", white: "#F5F5F0", navy: "#2C3E5C", gray: "#9AA3A0", blue: "#4A7FBF", red: "#C0473D", green: "#5A8A5F" };
+    return map[c] || "#CCCCCC";
+  }
+
+  renderVals() {
+    const s = this.state;
+    if (!this.data) return { isStoreView: true, showGrid: false, results: [], categoryOptions: [], sizeOptions: [], colorOptions: [], brandOptions: [], fitOptions: [], activityOptions: [], activityLog: [], agentPanelOpen: true, agentPanelWidth: "300px", agentPanelCollapsed: false, cartOpen: false, hasCartItems: false, cartCount: 0, cartItems: [], orderConfirmed: false, isDetailView: false, resultsHeading: "Loading…", resultsCountLabel: "", hasActiveFilters: false, activeFilterChips: [], loading: false, showEmptyState: false, agentStatusTitle: "" };
+    const { CATEGORY_LABELS, SIZES_BY_CATEGORY, COLORS, BRANDS, FITS, ACTIVITIES } = this.data;
+    const results = this.getResults();
+    const catCounts = {};
+    s.products.forEach(p => catCounts[p.category] = (catCounts[p.category] || 0) + 1);
+
+    const categoryOptions = Object.keys(CATEGORY_LABELS).map(cat => ({
+      value: cat, label: CATEGORY_LABELS[cat], count: catCounts[cat] || 0,
+      bg: s.category === cat ? "#EAF7F0" : "transparent", color: s.category === cat ? "#2F7857" : "#1E2B24", weight: s.category === cat ? "700" : "500",
+      onClick: () => this.toggleCategory(cat)
+    }));
+
+    const availableSizes = s.category ? SIZES_BY_CATEGORY[s.category] : [];
+    const sizeOptions = availableSizes.map(sz => ({
+      id: sz.replace(/[^a-z0-9]/gi, "_"), value: sz, onClick: () => this.toggleArrayFilter("sizes", sz),
+      bg: s.filters.sizes.includes(sz) ? "#4FAE7E" : "#FFFFFF", color: s.filters.sizes.includes(sz) ? "#fff" : "#1E2B24", border: s.filters.sizes.includes(sz) ? "#4FAE7E" : "#DCEEE3"
+    }));
+
+    const colorOptions = COLORS.map(c => ({
+      value: c, label: c, swatch: this.colorSwatch(c), onClick: () => this.toggleArrayFilter("colors", c),
+      border: s.filters.colors.includes(c) ? "3px solid #4FAE7E" : "1px solid #DCEEE3",
+      ring: s.filters.colors.includes(c) ? "0 0 0 2px #EAF7F0" : "none"
+    }));
+
+    const brandOptions = BRANDS.map(b => ({ id: b.replace(/[^a-z0-9]/gi, "_"), value: b, label: b, checked: s.filters.brands.includes(b), onClick: () => this.toggleArrayFilter("brands", b) }));
+
+    const fitOptions = FITS.map(f => ({ value: f, onClick: () => this.toggleArrayFilter("fits", f), bg: s.filters.fits.includes(f) ? "#4FAE7E" : "#FFFFFF", color: s.filters.fits.includes(f) ? "#fff" : "#1E2B24", border: s.filters.fits.includes(f) ? "#4FAE7E" : "#DCEEE3" }));
+    const activityOptions = ACTIVITIES.map(a => ({ value: a, onClick: () => this.toggleArrayFilter("activities", a), bg: s.filters.activities.includes(a) ? "#4FAE7E" : "#FFFFFF", color: s.filters.activities.includes(a) ? "#fff" : "#1E2B24", border: s.filters.activities.includes(a) ? "#4FAE7E" : "#DCEEE3" }));
+
+    const activeFilterChips = [];
+    if (s.category) activeFilterChips.push({ label: CATEGORY_LABELS[s.category], onRemove: () => this.toggleCategory(s.category) });
+    s.filters.sizes.forEach(v => activeFilterChips.push({ label: v, onRemove: () => this.toggleArrayFilter("sizes", v) }));
+    s.filters.colors.forEach(v => activeFilterChips.push({ label: v, onRemove: () => this.toggleArrayFilter("colors", v) }));
+    s.filters.brands.forEach(v => activeFilterChips.push({ label: v, onRemove: () => this.toggleArrayFilter("brands", v) }));
+    s.filters.fits.forEach(v => activeFilterChips.push({ label: v, onRemove: () => this.toggleArrayFilter("fits", v) }));
+    s.filters.activities.forEach(v => activeFilterChips.push({ label: v, onRemove: () => this.toggleArrayFilter("activities", v) }));
+    if (s.filters.maxPrice != null) activeFilterChips.push({ label: `Under $${s.filters.maxPrice}`, onRemove: () => this.setState(st => ({ filters: { ...st.filters, maxPrice: null } })) });
+    if (s.filters.minPrice != null) activeFilterChips.push({ label: `Over $${s.filters.minPrice}`, onRemove: () => this.setState(st => ({ filters: { ...st.filters, minPrice: null } })) });
+
+    const enrichedResults = results.map(p => ({
+      id: p.id, title: p.title, brand: p.brand, category: p.category, imgId: `img-${p.id}`,
+      priceLabel: `$${p.price.toFixed(2)}`, isDadMatch: this.isDadMatch(p),
+      swatches: p.colors.slice(0, 4).map(c => ({ color: this.colorSwatch(c) })),
+      onOpen: () => this.selectProduct(p.id)
+    }));
+
+    const requirementsParts = [];
+    if (s.category) requirementsParts.push(CATEGORY_LABELS[s.category]);
+    if (s.filters.sizes.length) requirementsParts.push(`size ${s.filters.sizes.join("/")}`);
+    if (s.filters.colors.length) requirementsParts.push(s.filters.colors.join(", "));
+    if (s.filters.brands.length) requirementsParts.push(s.filters.brands.join(", "));
+    if (s.filters.maxPrice != null) requirementsParts.push(`under $${s.filters.maxPrice}`);
+
+    let detail = null;
+    if (s.selectedProductId) {
+      const p = s.products.find(x => x.id === s.selectedProductId);
+      if (p) {
+        const D = this.data.DAD_PROFILE;
+        const sizeField = p.category === "shirts" ? D.shirtSize : p.category === "pants" ? D.pantsSize : p.category === "shoes" ? D.shoeSize : D.outerwearSize;
+        const sizeMatch = s.selectedSize === sizeField;
+        const colorMatch = D.colors.includes(s.selectedColor);
+        const brandMatch = D.brands.includes(p.brand);
+        const guide = this.data.sizeGuide(p.category);
+        detail = {
+          id: p.id, title: p.title, brand: p.brand, category: p.category, imgId: `img-detail-${p.id}`,
+          priceLabel: `$${p.price.toFixed(2)}`, description: p.description, fit: p.fit, material: p.material,
+          activitiesLabel: p.activities.join(", "), selectedColor: s.selectedColor, selectedSize: s.selectedSize,
+          selectedColorLabel: s.selectedColor ? s.selectedColor[0].toUpperCase() + s.selectedColor.slice(1) : "",
+          sizeGuide: guide, showSizeGuide: s.showSizeGuide,
+          matchInfo: { any: sizeMatch || colorMatch || brandMatch, sizeMark: sizeMatch ? "✓ Matches Dad's size" : "", colorMark: colorMatch ? "✓ Preferred color" : "", brandMark: brandMatch ? "✓ Preferred brand" : "" },
+          colorChoices: p.colors.map(c => ({ value: c, label: c, swatch: this.colorSwatch(c), onClick: () => this.pickColor(c), border: s.selectedColor === c ? "3px solid #4FAE7E" : "1px solid #DCEEE3", ring: s.selectedColor === c ? "0 0 0 2px #EAF7F0" : "none" })),
+          sizeChoices: p.sizes.map(sz => {
+            const unavailable = p.unavailableSizes && p.unavailableSizes.includes(sz);
+            const active = s.selectedSize === sz;
+            return { id: sz.replace(/[^a-z0-9]/gi, "_"), value: sz, variantId: `var_${p.id}_${sz}`, availableStr: unavailable ? "false" : "true", disabled: unavailable, onClick: () => this.pickSize(sz, unavailable), cursor: unavailable ? "not-allowed" : "pointer", strike: unavailable ? "line-through" : "none", bg: unavailable ? "#F6FBF8" : active ? "#4FAE7E" : "#FFFFFF", color: unavailable ? "#B8C4BE" : active ? "#fff" : "#1E2B24", border: unavailable ? "#DCEEE3" : active ? "#4FAE7E" : "#DCEEE3" };
+          }),
+          addDisabled: !!(p.unavailableSizes && p.unavailableSizes.includes(s.selectedSize)),
+          addBtnLabel: (p.unavailableSizes && p.unavailableSizes.includes(s.selectedSize)) ? "Unavailable in this size" : "Add to Cart",
+          addBtnBg: (p.unavailableSizes && p.unavailableSizes.includes(s.selectedSize)) ? "#C9D6CF" : "#4FAE7E",
+          addBtnCursor: (p.unavailableSizes && p.unavailableSizes.includes(s.selectedSize)) ? "not-allowed" : "pointer",
+          onAddToCart: () => this.addToCart(p)
+        };
+      }
+    }
+
+    const cartItems = s.cart.map((item, idx) => {
+      const p = s.products.find(x => x.id === item.productId) || {};
+      return { productId: item.productId, imgId: `img-cart-${item.productId}-${idx}`, title: p.title, persona: "Dad", colorLabel: item.color ? item.color[0].toUpperCase() + item.color.slice(1) : "", size: item.size, lineTotal: `$${((p.price || 0) * item.qty).toFixed(2)}`, onRemove: () => this.removeFromCart(idx) };
+    });
+    const subtotal = s.cart.reduce((sum, item) => { const p = s.products.find(x => x.id === item.productId); return sum + (p ? p.price * item.qty : 0); }, 0);
+
+    return {
+      searchInput: s.searchInput, onSearchChange: this.onSearchChange, onSearchSubmit: this.onSearchSubmit,
+      onToggleCart: this.toggleCart, hasCartItems: s.cart.length > 0, cartCount: s.cart.reduce((a, i) => a + i.qty, 0),
+      agentStatusTitle: "WebMCP-connected agent",
+      categoryOptions, sizeOptions, colorOptions, brandOptions, fitOptions, activityOptions,
+      minPriceInput: s.filters.minPrice ?? "", maxPriceInput: s.filters.maxPrice ?? "",
+      onMinPriceChange: this.setMinPrice, onMaxPriceChange: this.setMaxPrice,
+      onApplyDadProfile: this.applyDadProfile,
+      isStoreView: !s.selectedProductId, isDetailView: !!s.selectedProductId,
+      resultsHeading: s.category ? this.data.CATEGORY_LABELS[s.category] : (s.searchQuery ? `Results for "${s.searchQuery}"` : "All Products"),
+      resultsCountLabel: `${results.length} products found`,
+      hasActiveFilters: activeFilterChips.length > 0, activeFilterChips, onClearAllFilters: this.clearAllFilters,
+      loading: s.loading, showEmptyState: !s.loading && results.length === 0, showGrid: !s.loading && results.length > 0,
+      emptyStateRequirements: requirementsParts.length ? requirementsParts.join(" · ") : "none",
+      results: enrichedResults,
+      detail, showSizeGuide: s.showSizeGuide, onToggleSizeGuide: this.toggleSizeGuide, onBackToResults: this.backToResults,
+      agentPanelOpen: s.agentPanelOpen, agentPanelCollapsed: !s.agentPanelOpen, agentPanelWidth: s.agentPanelOpen ? "260px" : "32px",
+      onToggleAgentPanel: this.toggleAgentPanel, activityLog: [...s.activityLog].reverse(),
+      cartOpen: s.cartOpen, cartItems, cartSubtotalLabel: `$${subtotal.toFixed(2)}`,
+      checkoutDisabled: s.cart.length === 0, checkoutBtnBg: s.cart.length === 0 ? "#C9D6CF" : "#4FAE7E", checkoutBtnCursor: s.cart.length === 0 ? "not-allowed" : "pointer",
+      onCheckout: this.checkout, orderConfirmed: s.orderConfirmed, onCloseConfirmation: this.closeConfirmation
+    };
+  }
+}
+</script>
+</body>
+</html>
