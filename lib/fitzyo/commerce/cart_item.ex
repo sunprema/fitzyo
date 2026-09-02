@@ -25,7 +25,7 @@ defmodule Fitzyo.Commerce.CartItem do
     defaults [:read, :destroy]
 
     create :create do
-      accept [:cart_id, :variant_id, :quantity, :label, :unit_price]
+      accept [:cart_id, :variant_id, :quantity, :label, :unit_price, :source]
     end
 
     update :set_quantity do
@@ -56,6 +56,11 @@ defmodule Fitzyo.Commerce.CartItem do
 
       argument :label, :string
 
+      argument :source, Fitzyo.Commerce.Types.LineSource do
+        description "Who put the line in the cart: the human, an agent tool call, or an accepted agent proposal"
+        default :human
+      end
+
       run Fitzyo.Commerce.CartItem.Actions.Add
     end
   end
@@ -71,6 +76,13 @@ defmodule Fitzyo.Commerce.CartItem do
     end
 
     attribute :label, :string, public?: true
+
+    attribute :source, Fitzyo.Commerce.Types.LineSource do
+      description "Provenance: human, agent, or proposal (accepted by the human)"
+      allow_nil? false
+      default :human
+      public? true
+    end
 
     attribute :unit_price, :decimal do
       allow_nil? false

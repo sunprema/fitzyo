@@ -226,6 +226,42 @@ try {
     if (done === 4) await screenshot("1b-agent-working");
   }
 
+  // Nice-to-haves go in as one priced basket the shopper approves at once,
+  // with the budget shown so the trade-off is visible instead of narrated.
+  await say("Proposing a few extras as one basket");
+  await think("Everything essential is in. A sun hat for Dad, water shorts for Mom, and spare shorts for Milo would be nice but push past the budget together; the shopper should pick.");
+  const extras = [
+    { who: "Dad", text: "Sun hat", category: "accessories", size: "L/XL", activity: ["beach"], brands: [], price_max: 40 },
+    { who: "Mom", text: "Water shorts", category: "shorts", size: "M", activity: ["swim"], price_max: 70 },
+    { who: "Milo", text: "Spare athletic shorts", category: "shorts", size: "L", activity: ["running"], price_max: 30, optional: true },
+  ];
+  const lines = [];
+  for (const need of extras) {
+    const found = await call("find_matching_variants", { ...constraints(need), limit: 3 });
+    const best = found.matches[0];
+    if (best) lines.push({ variant_id: best.variant_id, label: need.who, reason: `${need.text}: ${best.brand} in ${best.color}`, optional: !!need.optional,
+      alternatives: found.matches.slice(1, 3).map((m) => ({ variant_id: m.variant_id, reason: `${m.brand} in ${m.color}, $${m.price}` })) });
+  }
+  if (lines.length) {
+    await evaluate(`window.__prop = {done: false}; navigator.modelContext.tools.get("propose_cart").execute(${JSON.stringify({ title: "Maui extras — your call", subtitle: "Tick what you want; the budget updates live", budget: { total: BUDGET }, lines })})` +
+      `.then(r => { window.__prop = {done: true, r}; }, e => { window.__prop = {done: true, e: String(e.message || e)}; }); true`);
+    console.log("▶ propose_cart(" + lines.length + " lines, budget $" + BUDGET + ")\n  (waiting for the shopper)");
+    await sleep(700);
+    await screenshot("1d-propose-cart");
+    await sleep(process.env.HUMAN_DELAY_MS ? parseInt(process.env.HUMAN_DELAY_MS, 10) : 2500);
+    // Stand-in shopper: untick from the bottom until the basket fits the budget, then accept.
+    for (let i = 0; i < 5; i++) {
+      const over = await evaluate(`parseFloat(document.getElementById("agent-proposal")?.dataset.overBy || "0")`);
+      if (!(over > 0)) break;
+      await evaluate(`(() => { const ticks = Array.from(document.querySelectorAll("#agent-proposal input[type=checkbox]:checked")); ticks.at(-1)?.click(); })(); true`);
+      await sleep(600);
+    }
+    await evaluate(`document.getElementById("proposal-accept")?.click(); true`);
+    await waitFor(() => evaluate(`window.__prop.done`), "proposal");
+    const r = await evaluate(`window.__prop`);
+    console.log("  " + JSON.stringify(r.r ?? r.e).slice(0, 260));
+  }
+
   await call("present_plan", plan(status));
   const cart = await call("get_cart");
   console.log(`\n🛍  Cart: ${cart.cart.item_count} items, $${cart.cart.subtotal} of $${BUDGET} budget`);

@@ -31,7 +31,7 @@ import topbar from "../vendor/topbar"
 // page is waiting on the postMessage bridge.
 // Tools that legitimately wait on a person get a longer client timeout than
 // the transport's default 15s; ask_human may block up to its own timeout_ms.
-const LONG_CALL_TIMEOUT_MS = {ask_human: 610000}
+const LONG_CALL_TIMEOUT_MS = {ask_human: 610000, propose_cart: 610000}
 
 const WebMcp = {
   ...WebMcpCore,

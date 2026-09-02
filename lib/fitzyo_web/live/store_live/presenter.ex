@@ -116,6 +116,7 @@ defmodule FitzyoWeb.StoreLive.Presenter do
             unit_price: number(item.unit_price),
             line_total: number(item.line_total),
             label: item.label,
+            source: to_string(item.source),
             available: item.variant.available
           }
         end),
@@ -159,6 +160,7 @@ defmodule FitzyoWeb.StoreLive.Presenter do
         assigns.annotations |> Map.values() |> List.flatten() |> Enum.map(&annotation/1),
       plan: assigns.plan,
       pending_question: FitzyoWeb.StoreLive.Questions.pending(assigns.question),
+      pending_proposal: FitzyoWeb.StoreLive.Proposals.pending(assigns.proposal),
       cart: cart_totals(assigns.cart),
       cart_open: assigns.cart_open,
       agent: %{

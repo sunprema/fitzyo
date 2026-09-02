@@ -26,10 +26,13 @@ defmodule FitzyoWeb.StoreLive do
 
   alias Fitzyo.Commerce
   alias FitzyoWeb.Plugs.CartSession
-  alias FitzyoWeb.StoreLive.{AgentTools, Filters, Questions, State}
+  alias FitzyoWeb.StoreLive.{AgentTools, Filters, Proposals, Questions, State}
 
   def on_mount(:intercept_questions, _params, _session, socket) do
-    {:cont, attach_hook(socket, :fz_ask_human, :handle_event, &Questions.intercept/3)}
+    {:cont,
+     socket
+     |> attach_hook(:fz_ask_human, :handle_event, &Questions.intercept/3)
+     |> attach_hook(:fz_propose_cart, :handle_event, &Proposals.intercept/3)}
   end
 
   # ---------------------------------------------------------------- lifecycle
@@ -50,7 +53,8 @@ defmodule FitzyoWeb.StoreLive do
        order_confirmation: nil,
        checkout_review: false,
        checkout_nonce: nil,
-       question: nil
+       question: nil,
+       proposal: nil
      )}
   end
 
@@ -300,7 +304,35 @@ defmodule FitzyoWeb.StoreLive do
     {:noreply, Questions.dismiss(socket)}
   end
 
+  # ---------------------------------------------------------------- events: agent proposals
+
+  def handle_event("proposal_toggle", %{"key" => key}, socket) do
+    {:noreply, Proposals.toggle_line(socket, String.to_integer(key))}
+  end
+
+  def handle_event("proposal_qty", %{"key" => key, "delta" => delta}, socket) do
+    key = String.to_integer(key)
+    line = Enum.find(socket.assigns.proposal.lines, &(&1.key == key))
+    {:noreply, Proposals.set_quantity(socket, key, line.quantity + String.to_integer(delta))}
+  end
+
+  def handle_event("proposal_swap", %{"key" => key, "variant_id" => variant_id}, socket) do
+    {:noreply, Proposals.swap(socket, String.to_integer(key), variant_id)}
+  end
+
+  def handle_event("proposal_accept", _params, socket) do
+    {:noreply, Proposals.accept(socket)}
+  end
+
+  def handle_event("proposal_reject", _params, socket) do
+    {:noreply, Proposals.reject(socket)}
+  end
+
   @impl true
+  def handle_info({:fz_proposal_timeout, proposal_id}, socket) do
+    {:noreply, Proposals.timeout(socket, proposal_id)}
+  end
+
   def handle_info({:fz_question_timeout, question_id}, socket) do
     {:noreply, Questions.timeout(socket, question_id)}
   end
@@ -403,7 +435,12 @@ defmodule FitzyoWeb.StoreLive do
       <div id="store" class="flex min-h-screen flex-col" phx-hook="FzFocus">
         <div id="webmcp" phx-hook="WebMcp" phx-update="ignore" hidden></div>
         <.store_header cart={@cart} filters={@filters} agent_connected={@agent_connected} />
-        <.agent_banner agent={@agent} thought={State.latest_thought(@activity)} question={@question} />
+        <.agent_banner
+          agent={@agent}
+          thought={State.latest_thought(@activity)}
+          question={@question}
+          proposal={@proposal}
+        />
         <.selections :if={@cart.items != []} cart={@cart} filters={@filters} />
 
         <div class="flex flex-1 min-h-0">
@@ -447,6 +484,7 @@ defmodule FitzyoWeb.StoreLive do
             activity={@activity}
             plan={@plan}
             question={@question}
+            proposal={@proposal}
           />
         </div>
 
@@ -544,12 +582,26 @@ defmodule FitzyoWeb.StoreLive do
   attr :agent, :map, required: true
   attr :thought, :string, default: nil
   attr :question, :map, default: nil
+  attr :proposal, :map, default: nil
 
-  # A blocked agent must never look idle: an open question overrides the
-  # agent's own status with a "waiting for you" state.
+  # A blocked agent must never look idle: an open question or proposal
+  # overrides the agent's own status with a "waiting for you" state.
   defp agent_banner(assigns) do
-    status = if assigns.question, do: :waiting, else: assigns.agent.status
-    assigns = assign(assigns, status: status)
+    status = if assigns.question || assigns.proposal, do: :waiting, else: assigns.agent.status
+
+    waiting_text =
+      cond do
+        assigns.question ->
+          {"#agent-question", assigns.question.question}
+
+        assigns.proposal ->
+          {"#agent-proposal", "Review the proposed basket: #{assigns.proposal.title}"}
+
+        true ->
+          nil
+      end
+
+    assigns = assign(assigns, status: status, waiting_text: waiting_text)
 
     ~H"""
     <div
@@ -574,8 +626,11 @@ defmodule FitzyoWeb.StoreLive do
         <% :waiting -> %>
           <span class="fz-pulse inline-block size-2.5 rounded-full bg-accent" />
           <span class="shrink-0 font-bold text-error">Waiting for you</span>
-          <a href="#agent-question" class="truncate font-semibold underline-offset-2 hover:underline">
-            {@question.question}
+          <a
+            href={elem(@waiting_text, 0)}
+            class="truncate font-semibold underline-offset-2 hover:underline"
+          >
+            {elem(@waiting_text, 1)}
           </a>
         <% _ -> %>
           <span class="shrink-0 font-bold">✓ Agent finished</span>
@@ -1341,6 +1396,219 @@ defmodule FitzyoWeb.StoreLive do
     """
   end
 
+  # ---------------------------------------------------------------- agent proposal
+
+  attr :proposal, :map, required: true
+
+  defp agent_proposal(assigns) do
+    totals = Proposals.totals(assigns.proposal)
+    assigns = assign(assigns, totals: totals, groups: Proposals.groups(assigns.proposal))
+
+    ~H"""
+    <section
+      id="agent-proposal"
+      class="fz-fade m-3 rounded-[14px] border-2 border-accent bg-base-100 p-3.5"
+      role="group"
+      aria-labelledby="agent-proposal-title"
+      data-proposal-id={@proposal.id}
+      data-selected-total={Decimal.to_string(@totals.total, :normal)}
+      data-over-by={Decimal.to_string(@totals.over_by, :normal)}
+    >
+      <div class="mb-1 flex items-start justify-between gap-2">
+        <div class="text-[11px] font-bold uppercase tracking-wider text-error">✦ Proposed basket</div>
+        <span class="text-[10px] text-faint">
+          {if @proposal.mode == "replace", do: "replaces cart", else: "adds to cart"}
+        </span>
+      </div>
+      <h3 id="agent-proposal-title" class="font-display text-[15px] font-semibold leading-snug">
+        {@proposal.title}
+      </h3>
+      <p :if={@proposal.subtitle} class="text-xs text-muted">{@proposal.subtitle}</p>
+
+      <div
+        id="proposal-total"
+        class={[
+          "mt-2 rounded-lg px-2.5 py-1.5 text-[13px] font-bold",
+          if(Decimal.positive?(@totals.over_by),
+            do: "bg-peach text-error",
+            else: "bg-mint text-secondary dark:bg-base-300"
+          )
+        ]}
+      >
+        <%= if @proposal.budget[:total] do %>
+          {format_price(@totals.total)} of {format_price(@proposal.budget.total)}
+          <span :if={Decimal.positive?(@totals.over_by)}>· {format_price(@totals.over_by)} over</span>
+          <span :if={!Decimal.positive?(@totals.over_by)}>· within budget</span>
+        <% else %>
+          {format_price(@totals.total)} selected
+        <% end %>
+      </div>
+
+      <div :for={{label, lines} <- @groups} class="mt-3" data-label={label}>
+        <div class="mb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-secondary">
+          <span>{label || "For the cart"}</span>
+          <span
+            :if={label}
+            class={[Decimal.positive?(@totals.over_by_label[label] || Decimal.new(0)) && "text-error"]}
+          >
+            {format_price(@totals.by_label[label] || Decimal.new(0))}
+            <span :if={cap = get_in(@proposal.budget, [:by_label, label])}> / {format_price(cap)}</span>
+          </span>
+        </div>
+        <ul class="flex flex-col gap-1.5">
+          <li
+            :for={line <- lines}
+            id={"proposal-line-#{line.key}"}
+            data-line-key={line.key}
+            data-variant-id={line.chosen_variant_id}
+            data-selected={to_string(line.selected)}
+            class={[
+              "rounded-xl border p-2 text-[12px]",
+              if(line.selected,
+                do: "border-base-300 bg-base-200",
+                else: "border-dashed border-base-300 opacity-60"
+              )
+            ]}
+          >
+            <div class="flex items-start gap-2">
+              <input
+                type="checkbox"
+                id={"proposal-tick-#{line.key}"}
+                checked={line.selected}
+                phx-click="proposal_toggle"
+                phx-value-key={line.key}
+                aria-label={"Include #{Proposals.chosen(line).name}"}
+                class="checkbox checkbox-primary checkbox-sm mt-1 rounded"
+              />
+              <.product_art
+                name={Proposals.chosen(line).name}
+                hex={Proposals.chosen(line).hex}
+                class="size-10 shrink-0 rounded-lg [&>span:first-child]:text-xs"
+              />
+              <div class="min-w-0 flex-1">
+                <div class="font-semibold leading-snug">{Proposals.chosen(line).name}</div>
+                <div class="text-[11px] text-muted">
+                  {Proposals.chosen(line).brand} · {Proposals.chosen(line).detail}
+                </div>
+                <div :if={line.optional} class="text-[10px] uppercase tracking-wide text-faint">
+                  optional
+                </div>
+              </div>
+            </div>
+            <div :if={line.reason} class="mt-1 pl-7 text-[11px] italic text-base-content/80">
+              {line.reason}
+            </div>
+            <div
+              :if={line.auto_swapped and line.chosen_variant_id != line.proposed_variant_id}
+              class="mt-1 pl-7 text-[11px] font-semibold text-error"
+            >
+              Proposed {line.proposed_variant_id} is sold out; showing an alternative the agent offered
+            </div>
+            <div class="mt-1.5 flex items-center justify-between pl-7">
+              <div class="flex items-center gap-0.5 rounded-full border border-base-300">
+                <button
+                  type="button"
+                  phx-click="proposal_qty"
+                  phx-value-key={line.key}
+                  phx-value-delta="-1"
+                  aria-label="Decrease quantity"
+                  class="px-1.5 text-sm cursor-pointer"
+                >
+                  −
+                </button>
+                <span class="min-w-4 text-center text-xs font-semibold" data-quantity={line.quantity}>
+                  {line.quantity}
+                </span>
+                <button
+                  type="button"
+                  phx-click="proposal_qty"
+                  phx-value-key={line.key}
+                  phx-value-delta="1"
+                  aria-label="Increase quantity"
+                  class="px-1.5 text-sm cursor-pointer"
+                >
+                  +
+                </button>
+              </div>
+              <span class="text-[12px] font-bold">
+                {format_price(Decimal.mult(Proposals.chosen(line).price, line.quantity))}
+              </span>
+            </div>
+            <div :if={length(line.options) > 1} class="mt-1.5 flex flex-wrap gap-1 pl-7">
+              <button
+                :for={option <- line.options}
+                type="button"
+                id={"proposal-swap-#{line.key}-#{dom_slug(option.variant_id)}"}
+                phx-click="proposal_swap"
+                phx-value-key={line.key}
+                phx-value-variant_id={option.variant_id}
+                disabled={!option.available}
+                title={option.reason}
+                class={[
+                  "rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                  cond do
+                    option.variant_id == line.chosen_variant_id ->
+                      "border-primary bg-primary text-primary-content"
+
+                    option.available ->
+                      "border-base-300 bg-base-100 cursor-pointer hover:border-primary/60"
+
+                    true ->
+                      "border-base-300 text-faint line-through cursor-not-allowed"
+                  end
+                ]}
+              >
+                {option.name}{if option.detail, do: " · " <> option.detail} · {format_price(
+                  option.price
+                )}
+              </button>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <ul
+        :if={@proposal.unavailable != []}
+        id="proposal-unavailable"
+        class="mt-2 flex flex-col gap-0.5 text-[11px] text-faint"
+      >
+        <li :for={u <- @proposal.unavailable} class="line-through" data-variant-id={u.variant_id}>
+          {u.variant_id} · {u.reason}
+        </li>
+      </ul>
+
+      <div class="mt-3 flex gap-2">
+        <button
+          type="button"
+          id="proposal-reject"
+          phx-click="proposal_reject"
+          class="rounded-xl border border-base-300 px-3 py-2 text-[12px] font-semibold cursor-pointer hover:bg-base-200"
+        >
+          Reject
+        </button>
+        <button
+          type="button"
+          id="proposal-accept"
+          phx-click="proposal_accept"
+          disabled={@totals.selected_count == 0}
+          class={[
+            "flex-1 rounded-xl py-2 text-[12px] font-bold text-primary-content",
+            if(@totals.selected_count == 0,
+              do: "bg-base-300 text-muted cursor-not-allowed",
+              else: "bg-primary cursor-pointer hover:brightness-95"
+            )
+          ]}
+        >
+          Accept selected · {@totals.selected_count} · {format_price(@totals.total)}
+        </button>
+      </div>
+      <p class="mt-2 text-[10px] text-faint">
+        Accepting adds these to your cart. Nothing is ordered until you review and hold to place it.
+      </p>
+    </section>
+    """
+  end
+
   # ---------------------------------------------------------------- agent question
 
   attr :question, :map, required: true
@@ -1476,6 +1744,7 @@ defmodule FitzyoWeb.StoreLive do
   attr :activity, :list, required: true
   attr :plan, :map, default: nil
   attr :question, :map, default: nil
+  attr :proposal, :map, default: nil
 
   defp agent_panel(assigns) do
     ~H"""
@@ -1483,7 +1752,11 @@ defmodule FitzyoWeb.StoreLive do
       id="agent-panel"
       class={[
         "hidden shrink-0 flex-col border-l border-base-300 bg-base-200 transition-[width] duration-200 lg:flex",
-        if(@open, do: "w-[260px]", else: "w-8")
+        cond do
+          !@open -> "w-8"
+          @proposal || @question -> "w-[340px]"
+          true -> "w-[260px]"
+        end
       ]}
       aria-label="Agent activity"
       data-open={to_string(@open)}
@@ -1501,6 +1774,7 @@ defmodule FitzyoWeb.StoreLive do
           </button>
         </div>
         <.agent_question :if={@question} question={@question} />
+        <.agent_proposal :if={@proposal} proposal={@proposal} />
         <section
           :if={@plan}
           id="agent-plan"
@@ -1708,6 +1982,18 @@ defmodule FitzyoWeb.StoreLive do
                   </.link>
                   <div class="text-xs text-muted">
                     {humanize(item.variant.color)} / {item.variant.size}
+                    <span
+                      :if={item.source != :human}
+                      class="ml-1 rounded-full bg-mint px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-secondary dark:bg-base-300"
+                      title={
+                        if item.source == :proposal,
+                          do: "Proposed by your agent, accepted by you",
+                          else: "Added by your agent"
+                      }
+                      data-source={item.source}
+                    >
+                      ✦ {if item.source == :proposal, do: "accepted", else: "agent"}
+                    </span>
                   </div>
                   <div class="mt-1.5 flex items-center justify-between">
                     <div class="flex items-center gap-1 rounded-full border border-base-300">

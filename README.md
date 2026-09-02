@@ -21,7 +21,7 @@ ids stay stable.
 
 FitzYo has no built-in intelligence. A WebMCP-capable agent (a browser or
 extension that provides `navigator.modelContext`, or a shell using the
-postMessage bridge) attaches to the store page, reads its 21 tools, and drives
+postMessage bridge) attaches to the store page, reads its 22 tools, and drives
 it using the shopper's private context in `context/`:
 
 - `context/FAMILY.md` — sizes and preferences for Dad, Mom, and Milo

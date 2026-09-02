@@ -107,6 +107,7 @@ defmodule FitzyoWeb.StoreLive.Questions do
       {:ok, question} ->
         socket
         |> supersede()
+        |> FitzyoWeb.StoreLive.Proposals.supersede()
         |> open(Map.put(question, :call_id, call_id))
 
       {:error, message} ->
@@ -198,9 +199,10 @@ defmodule FitzyoWeb.StoreLive.Questions do
     |> State.focus_element("agent-question")
   end
 
-  defp supersede(%{assigns: %{question: nil}} = socket), do: socket
+  @doc "Resolves an open question as superseded (also used when a proposal opens)."
+  def supersede(%{assigns: %{question: nil}} = socket), do: socket
 
-  defp supersede(socket),
+  def supersede(socket),
     do: resolve(socket, %{answered: false, reason: "superseded"}, nil)
 
   # Pushes the reply for the open question and clears it. `human_note` is the

@@ -50,6 +50,7 @@ the reply.
 | `present_plan` | state | Shows the agent's plan in the agent panel |
 | `agent_update` | state | Banner status, progress, and streamed thoughts |
 | `ask_human` | blocking | Ask the shopper a question in the agent panel; resolves when they answer |
+| `propose_cart` | blocking | One priced, grouped basket the shopper accepts in a single action |
 | `get_store_state` | read | What the human currently sees, including their overrides |
 | `focus_product` | ui | Opens and highlights a product, optionally a variant |
 | `focus_filter` | ui | Highlights a filter section |
@@ -148,6 +149,40 @@ see; a free-text question is the easiest place to leak private context.
 The call blocks up to `timeout_ms` (default 2 minutes, max 10). The page's own
 transport allows that; if your agent runtime has a shorter per-call limit,
 raise it for this tool or poll `pending_question` instead.
+
+## 4c. One basket, one decision: `propose_cart`
+
+When you have assembled a whole outfit or trip, send it as one proposal
+instead of many `add_to_cart` calls. Each line carries a `variant_id`, a
+`quantity`, a `label`, a one-line `reason`, optionally `optional: true` for
+nice-to-haves (rendered unticked) and up to three `alternatives` you would
+accept. Send `budget` (total and per label) when the shopper gave you one.
+
+The store prices everything at current prices, drops unknown or sold-out
+variants into `unavailable` (preselecting an offered alternative when one is
+in stock), groups by label with subtotals, and shows the budget overage live
+as the shopper ticks and unticks lines, changes quantities, or swaps. The
+banner shows **Waiting for you** and the store stays fully usable meanwhile.
+
+Accepting adds the selected lines to the cart as it is *then* (the shopper
+may have edited it) and never checks out. Read the result rather than
+assuming your proposal went through:
+
+```json
+{"accepted": true, "applied": [...], "declined": ["prod_1024_white_m"],
+ "substituted": [{"proposed": "prod_1012_navy_36", "chosen": "prod_1008_navy_xl"}],
+ "unavailable": [{"variant_id": "prod_1024_coral_m", "reason": "out_of_stock"}],
+ "cart": {"item_count": 12, "subtotal": 595, "currency": "USD"},
+ "budget": {"total": 600, "over_by": 0}}
+{"accepted": false, "reason": "rejected" | "timeout" | "superseded", "cart": {...}}
+```
+
+`mode: "replace"` clears the cart on accept only. Lines added this way are
+marked `source: "proposal"` in the cart, so the order record shows what the
+human chose by hand, what an agent added, and what an agent proposed and the
+human accepted. One pending decision at a time: a proposal supersedes an open
+question and vice versa. Rule of thumb: if the choice is *which lines*,
+propose; if it is *which strategy*, `ask_human`.
 
 ## 5. Human override
 

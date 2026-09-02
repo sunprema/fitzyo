@@ -296,6 +296,7 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
         annotations: @state_change
       },
       FitzyoWeb.StoreLive.Questions.spec(),
+      FitzyoWeb.StoreLive.Proposals.spec(),
       %{
         name: "get_store_state",
         description:
@@ -539,8 +540,8 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
 
   # ask_human is intercepted by FitzyoWeb.StoreLive before the library
   # dispatches here; this clause only exists so a misrouted call fails clearly.
-  defp run("ask_human", _input, _socket) do
-    error("INVALID_OPERATION", "ask_human must be called through the WebMCP transport")
+  defp run(name, _input, _socket) when name in ["ask_human", "propose_cart"] do
+    error("INVALID_OPERATION", "#{name} must be called through the WebMCP transport")
   end
 
   defp run("get_store_state", _input, socket) do
@@ -584,7 +585,8 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
            commerce(
              Commerce.add_to_cart(socket.assigns.cart_id, variant.id, %{
                quantity: quantity,
-               label: label
+               label: label,
+               source: :agent
              }),
              variant
            ) do

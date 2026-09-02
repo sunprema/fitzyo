@@ -15,7 +15,8 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
   @tool_names ~w(get_store_info get_categories search_products filter_products get_product
                  get_variants get_size_guide find_matching_variants compare_products get_cart
                  add_to_cart remove_from_cart update_cart_item clear_cart recommend_product
-                 present_plan agent_update ask_human get_store_state focus_product focus_filter)
+                 present_plan agent_update ask_human propose_cart get_store_state focus_product
+                 focus_filter)
 
   setup do
     shirts =
@@ -101,7 +102,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
       assert Enum.find(tools, &(&1.name == "get_cart")).annotations.readOnlyHint
       refute Enum.find(tools, &(&1.name == "add_to_cart")).annotations.readOnlyHint
       refute Enum.any?(tools, &(&1.annotations[:destructive?] == true))
-      assert length(AgentTools.tools()) == 21
+      assert length(AgentTools.tools()) == 22
     end
 
     test "unknown tools and malformed input return structured errors", %{conn: conn} do
@@ -934,6 +935,246 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
       id = System.unique_integer([:positive])
       render_hook(view, "webmcp:call", %{"id" => id, "tool" => "ask_human", "input" => %{}})
       assert_push_event(view, "webmcp:result", %{id: ^id, status: "error"})
+    end
+  end
+
+  describe "propose_cart" do
+    defp propose(view, input) do
+      id = System.unique_integer([:positive])
+      render_hook(view, "webmcp:call", %{"id" => id, "tool" => "propose_cart", "input" => input})
+      refute_push_event(view, "webmcp:result", %{id: ^id})
+      id
+    end
+
+    defp resolved(view, id) do
+      assert_push_event(view, "webmcp:result", %{id: ^id, status: "ok", result: result})
+      result
+    end
+
+    test "renders a priced, grouped basket with live totals and applies only what the shopper accepts",
+         ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      blue_xl = "#{ctx.columbia.id}_blue_xl"
+      black_l = "#{ctx.patagonia.id}_black_l"
+      short_32 = "#{ctx.short.id}_black_32"
+      sage_xl = "#{ctx.columbia.id}_sage_xl"
+
+      id =
+        propose(view, %{
+          "title" => "Beach trip — 3 person wardrobe",
+          "subtitle" => "Sun protection, swim, dinners",
+          "budget" => %{"total" => 150, "by_label" => %{"Dad" => 100}},
+          "lines" => [
+            %{
+              "variant_id" => blue_xl,
+              "quantity" => 2,
+              "label" => "Dad",
+              "reason" => "Quick-dry travel shirt"
+            },
+            %{
+              "variant_id" => black_l,
+              "label" => "Dad",
+              "reason" => "Trail tee",
+              "optional" => true
+            },
+            %{"variant_id" => short_32, "label" => "Milo", "reason" => "Hiking short"},
+            %{"variant_id" => sage_xl, "label" => "Dad", "reason" => "Sold out one"},
+            %{"variant_id" => "ghost_variant", "label" => "Mom"}
+          ]
+        })
+
+      # rendered, blocking, and visible in the banner
+      assert has_element?(view, "#agent-proposal", "Beach trip — 3 person wardrobe")
+
+      assert has_element?(
+               view,
+               "#agent-banner[data-status='waiting']",
+               "Review the proposed basket"
+             )
+
+      assert has_element?(view, "#agent-proposal [data-label='Dad']", "Quick-dry travel shirt")
+      assert has_element?(view, "#agent-proposal [data-label='Milo']", "Hiking short")
+      assert has_element?(view, "#proposal-line-1[data-selected='false']")
+
+      assert has_element?(
+               view,
+               "#proposal-unavailable li[data-variant-id='#{sage_xl}']",
+               "out_of_stock"
+             )
+
+      assert has_element?(
+               view,
+               "#proposal-unavailable li[data-variant-id='ghost_variant']",
+               "not_found"
+             )
+
+      # 2 × $45 + $79 = $169 selected against a $150 budget
+      assert has_element?(view, "#agent-proposal[data-selected-total='169'][data-over-by='19']")
+      assert has_element?(view, "#proposal-total", "$19.00 over")
+      assert has_element?(view, "#agent-proposal [data-label='Dad']", "$90.00 / $100.00")
+
+      state = ok!(view, "get_store_state").state
+      assert state.pending_proposal.line_count == 3
+      assert state.pending_proposal.budget == %{total: 150.0, over_by: 19.0}
+
+      # the shopper edits: drops one shirt, ticks the optional tee, unticks the short
+      view |> element("#proposal-line-0 [aria-label='Decrease quantity']") |> render_click()
+      view |> element("#proposal-tick-1") |> render_click()
+      view |> element("#proposal-tick-2") |> render_click()
+      assert has_element?(view, "#agent-proposal[data-selected-total='94'][data-over-by='0']")
+      assert has_element?(view, "#proposal-total", "within budget")
+
+      # meanwhile the human adds something by hand; it must survive the accept
+      ok!(view, "add_to_cart", %{
+        "product_id" => ctx.short.id,
+        "variant_id" => "#{ctx.short.id}_black_34"
+      })
+
+      view |> element("#proposal-accept") |> render_click()
+      result = resolved(view, id)
+
+      assert result.accepted
+
+      assert Enum.map(result.applied, &{&1.variant_id, &1.quantity, &1.label}) == [
+               {blue_xl, 1, "Dad"},
+               {black_l, 1, "Dad"}
+             ]
+
+      assert Enum.map(result.applied, & &1.line_total) == [45.0, 49.0]
+      assert result.declined == [short_32]
+      assert result.substituted == []
+      assert Enum.map(result.unavailable, & &1.reason) == ["out_of_stock", "not_found"]
+      assert result.cart.item_count == 3
+      assert result.budget == %{total: 150.0, over_by: 23.0}
+
+      cart = ok!(view, "get_cart").cart
+
+      assert Enum.map(cart.items, &{&1.variant_id, &1.source}) |> Enum.sort() ==
+               Enum.sort([
+                 {blue_xl, "proposal"},
+                 {black_l, "proposal"},
+                 {"#{ctx.short.id}_black_34", "agent"}
+               ])
+
+      refute has_element?(view, "#agent-proposal")
+      refute has_element?(view, "#order-confirmation")
+
+      assert has_element?(
+               view,
+               "#agent-activity li[data-kind='human']",
+               "Accepted proposal: 2 lines added"
+             )
+
+      assert ok!(view, "get_store_state").state.pending_proposal == nil
+    end
+
+    test "alternatives can be swapped, and a sold-out line preselects an offered alternative",
+         ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      blue_xl = "#{ctx.columbia.id}_blue_xl"
+      blue_l = "#{ctx.columbia.id}_blue_l"
+      sage_xl = "#{ctx.columbia.id}_sage_xl"
+      black_xl = "#{ctx.patagonia.id}_black_xl"
+
+      id =
+        propose(view, %{
+          "lines" => [
+            %{
+              "variant_id" => blue_xl,
+              "label" => "Dad",
+              "alternatives" => [%{"variant_id" => blue_l, "reason" => "same shirt, size L"}]
+            },
+            %{
+              "variant_id" => sage_xl,
+              "label" => "Dad",
+              "alternatives" => [%{"variant_id" => black_xl, "reason" => "same size, in stock"}]
+            }
+          ]
+        })
+
+      assert has_element?(view, "#proposal-line-1[data-variant-id='#{black_xl}']", "sold out")
+      view |> element("#proposal-line-0 [phx-value-variant_id='#{blue_l}']") |> render_click()
+      assert has_element?(view, "#proposal-line-0[data-variant-id='#{blue_l}']")
+
+      view |> element("#proposal-accept") |> render_click()
+      result = resolved(view, id)
+
+      assert Enum.sort(result.substituted) ==
+               Enum.sort([
+                 %{proposed: blue_xl, chosen: blue_l},
+                 %{proposed: sage_xl, chosen: black_xl}
+               ])
+
+      assert Enum.map(result.applied, & &1.variant_id) == [blue_l, black_xl]
+    end
+
+    test "replace mode clears the cart only on accept; reject changes nothing", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      blue_xl = "#{ctx.columbia.id}_blue_xl"
+      short_32 = "#{ctx.short.id}_black_32"
+
+      ok!(view, "add_to_cart", %{"product_id" => ctx.short.id, "variant_id" => short_32})
+
+      id = propose(view, %{"mode" => "replace", "lines" => [%{"variant_id" => blue_xl}]})
+      assert ok!(view, "get_cart").cart.item_count == 1
+      view |> element("#proposal-reject") |> render_click()
+      assert %{accepted: false, reason: "rejected", cart: %{item_count: 1}} = resolved(view, id)
+      assert has_element?(view, "#agent-activity li[data-kind='human']", "Rejected")
+
+      id = propose(view, %{"mode" => "replace", "lines" => [%{"variant_id" => blue_xl}]})
+      view |> element("#proposal-accept") |> render_click()
+      result = resolved(view, id)
+      assert result.cart.item_count == 1
+      assert [%{variant_id: ^blue_xl}] = ok!(view, "get_cart").cart.items
+    end
+
+    test "timeout and supersession resolve as not accepted; a question supersedes a proposal",
+         ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      lines = [%{"variant_id" => "#{ctx.columbia.id}_blue_xl"}]
+
+      id = propose(view, %{"lines" => lines, "timeout_ms" => 5000})
+      %{socket: %{assigns: %{proposal: %{id: pid}}}} = :sys.get_state(view.pid)
+      send(view.pid, {:fz_proposal_timeout, pid})
+      assert %{accepted: false, reason: "timeout", proposal_id: ^pid} = resolved(view, id)
+      refute has_element?(view, "#agent-proposal")
+
+      first = propose(view, %{"lines" => lines})
+      second = propose(view, %{"lines" => lines})
+      assert %{accepted: false, reason: "superseded"} = resolved(view, first)
+
+      qid = System.unique_integer([:positive])
+
+      render_hook(view, "webmcp:call", %{
+        "id" => qid,
+        "tool" => "ask_human",
+        "input" => %{"question" => "Skip it?"}
+      })
+
+      assert %{accepted: false, reason: "superseded"} = resolved(view, second)
+      assert has_element?(view, "#agent-question")
+      refute has_element?(view, "#agent-proposal")
+    end
+
+    test "invalid proposals fail immediately and never touch the cart", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      for input <- [
+            %{},
+            %{"lines" => []},
+            %{"lines" => [%{"variant_id" => "nope"}]},
+            %{"lines" => [%{"variant_id" => "#{ctx.columbia.id}_blue_xl"}], "mode" => "merge"}
+          ] do
+        id = System.unique_integer([:positive])
+
+        render_hook(view, "webmcp:call", %{"id" => id, "tool" => "propose_cart", "input" => input})
+
+        assert_push_event(view, "webmcp:result", %{id: ^id, status: "error", error: json})
+        assert %{"code" => "INVALID_OPERATION"} = Jason.decode!(json)
+      end
+
+      refute has_element?(view, "#agent-proposal")
+      assert ok!(view, "get_cart").cart.item_count == 0
     end
   end
 
