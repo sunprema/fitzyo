@@ -218,6 +218,41 @@ defmodule FitzyoWeb.StoreLive.Filters do
     |> Enum.sort_by(fn group -> Enum.find_index(facet_keys(), &(&1 == group.facet)) end)
   end
 
+  @doc """
+  Chip groups split by who set them, for the "Active:" row: one section per
+  owner (`:human` then `:agent`), each holding that owner's chips grouped by
+  facet. Empty sections are dropped. A facet whose values came from both
+  sides appears in both sections.
+  """
+  @spec chip_sections(t(), %{optional({String.t(), String.t()}) => :human | :agent}) :: [
+          %{origin: :human | :agent, groups: [map()]}
+        ]
+  def chip_sections(%__MODULE__{} = filters, origins) when is_map(origins) do
+    groups = chip_groups(filters)
+
+    Enum.flat_map([:human, :agent], fn origin ->
+      section_groups =
+        Enum.flat_map(groups, fn group ->
+          owned = Enum.filter(group.chips, &(chip_origin(origins, &1) == origin))
+          if owned == [], do: [], else: [%{group | chips: owned}]
+        end)
+
+      if section_groups == [], do: [], else: [%{origin: origin, groups: section_groups}]
+    end)
+  end
+
+  @doc "Who set a chip; anything without a recorded origin counts as the human's."
+  def chip_origin(origins, chip), do: Map.get(origins, chip_key(chip), :human)
+
+  @doc "Drops every constraint set by one owner."
+  @spec clear_origin(t(), map(), :human | :agent) :: t()
+  def clear_origin(%__MODULE__{} = filters, origins, origin) do
+    filters
+    |> chips()
+    |> Enum.filter(&(chip_origin(origins, &1) == origin))
+    |> Enum.reduce(filters, fn chip, acc -> remove(acc, chip.facet, chip.value) end)
+  end
+
   @doc "The identity of a chip for origin tracking: `{facet, value}`, with scalar facets keyed by their text."
   def chip_key(%{facet: facet, value: nil, label: label}), do: {facet, label}
   def chip_key(%{facet: facet, value: value}), do: {facet, value}

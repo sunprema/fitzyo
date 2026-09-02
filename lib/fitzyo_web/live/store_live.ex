@@ -132,6 +132,19 @@ defmodule FitzyoWeb.StoreLive do
     patch_filters(socket, Filters.clear(socket.assigns.filters))
   end
 
+  # Drop every constraint one owner set: "undo what the agent did" or "keep
+  # only the agent's constraints".
+  def handle_event("clear_origin", %{"origin" => origin}, socket) when origin in ~w(human agent) do
+    filters =
+      Filters.clear_origin(
+        socket.assigns.filters,
+        socket.assigns.filter_origins,
+        String.to_existing_atom(origin)
+      )
+
+    patch_filters(socket, filters)
+  end
+
   # ---------------------------------------------------------------- events: product detail
 
   def handle_event("select_color", %{"option" => color}, socket) do
@@ -547,16 +560,6 @@ defmodule FitzyoWeb.StoreLive do
   defp chip_label(facets, %{facet: "category", value: id}), do: State.category_name(facets, id)
   defp chip_label(_facets, chip), do: chip.label
 
-  defp group_origin(origins, group) do
-    group.chips
-    |> Enum.map(&Map.get(origins, Filters.chip_key(&1), :human))
-    |> Enum.uniq()
-    |> case do
-      [one] -> to_string(one)
-      _ -> "mixed"
-    end
-  end
-
   defp product_path(id, filters), do: State.product_path(id, filters)
 
   defp size_guide_columns(entries) do
@@ -591,7 +594,7 @@ defmodule FitzyoWeb.StoreLive do
     assigns =
       assign(assigns,
         chips: Filters.chips(assigns.filters),
-        chip_groups: Filters.chip_groups(assigns.filters),
+        chip_sections: Filters.chip_sections(assigns.filters, assigns.filter_origins),
         variant: State.selected_variant(%{assigns: assigns})
       )
 
@@ -637,9 +640,7 @@ defmodule FitzyoWeb.StoreLive do
                 filters={@filters}
                 facets={@facets}
                 chips={@chips}
-                chip_groups={@chip_groups}
-                origins={@filter_origins}
-                excluded_by={@excluded_by}
+                chip_sections={@chip_sections}
                 results_count={@results_count}
                 streams={@streams}
                 annotations={@annotations}
@@ -1151,9 +1152,7 @@ defmodule FitzyoWeb.StoreLive do
   attr :filters, Filters, required: true
   attr :facets, :map, required: true
   attr :chips, :list, required: true
-  attr :chip_groups, :list, default: []
-  attr :origins, :map, default: %{}
-  attr :excluded_by, :map, default: %{}
+  attr :chip_sections, :list, default: []
   attr :results_count, :integer, required: true
   attr :streams, :map, required: true
   attr :annotations, :map, default: %{}
@@ -1172,61 +1171,79 @@ defmodule FitzyoWeb.StoreLive do
       </div>
 
       <div :if={@chips != []} id="active-filters" class="mt-3 flex flex-wrap items-center gap-2">
-        <span class="text-[11px] font-bold uppercase tracking-wider text-faint">Active:</span>
         <div
-          :for={group <- @chip_groups}
-          id={"chip-group-#{group.facet}"}
-          data-facet={group.facet}
-          data-origin={group_origin(@origins, group)}
-          data-hiding={@excluded_by[group.facet]}
-          class="flex flex-wrap items-center gap-1 rounded-full border border-base-300 bg-base-100 py-0.5 pl-2.5 pr-1"
+          :for={section <- @chip_sections}
+          id={"filters-by-#{section.origin}"}
+          data-origin={section.origin}
+          class={[
+            "flex flex-wrap items-center gap-2 rounded-xl border px-2.5 py-1.5",
+            if(section.origin == :agent,
+              do: "border-peach-dark/60 bg-peach/30",
+              else: "border-base-300 bg-base-100/60"
+            )
+          ]}
         >
-          <span class="text-[11px] font-bold text-muted">{group.label}</span>
           <span
             class={[
-              "rounded-full px-1.5 text-[9px] font-bold uppercase tracking-wide",
-              if(group_origin(@origins, group) == "agent",
-                do: "bg-peach text-error",
-                else: "bg-mint text-secondary dark:bg-base-300"
-              )
+              "flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider",
+              if(section.origin == :agent, do: "text-error", else: "text-secondary")
             ]}
             title={
-              case group_origin(@origins, group) do
-                "agent" -> "Set by your agent"
-                "human" -> "Set by you"
-                _ -> "Set by you and your agent"
-              end
+              if section.origin == :agent,
+                do: "Constraints set by your agent",
+                else: "Constraints set by you"
             }
           >
-            {case group_origin(@origins, group) do
-              "agent" -> "✦ agent"
-              "human" -> "you"
-              _ -> "mixed"
-            end}
+            <%= if section.origin == :agent do %>
+              <span aria-hidden="true">✦</span> Agent
+            <% else %>
+              <.icon name="hero-user-micro" class="size-3.5" /> You
+            <% end %>
           </span>
-          <span
-            :if={(@excluded_by[group.facet] || 0) > 0}
-            class="text-[10px] text-faint"
-            title="Products that would show if this constraint were dropped"
+          <div
+            :for={group <- section.groups}
+            id={"chip-group-#{group.facet}-#{section.origin}"}
+            data-facet={group.facet}
+            data-origin={section.origin}
+            class="flex flex-wrap items-center gap-1 rounded-full border border-base-300 bg-base-100 py-0.5 pl-2.5 pr-1"
           >
-            hiding {@excluded_by[group.facet]}
-          </span>
-          <.active_chip
-            :for={chip <- group.chips}
-            facet={chip.facet}
-            value={chip.value}
-            label={chip_label(@facets, chip)}
-          />
+            <span class="text-[11px] font-bold text-muted">{group.label}</span>
+            <.active_chip
+              :for={chip <- group.chips}
+              facet={chip.facet}
+              value={chip.value}
+              label={chip_label(@facets, chip)}
+            />
+            <button
+              :if={length(group.chips) > 1}
+              type="button"
+              phx-click="clear_facet"
+              phx-value-facet={group.facet}
+              aria-label={"Drop the #{group.label} constraint"}
+              title="Loosen this constraint"
+              class="px-1 text-xs text-faint cursor-pointer hover:text-error"
+            >
+              ×
+            </button>
+          </div>
           <button
-            :if={length(group.chips) > 1}
+            :if={length(@chip_sections) > 1}
             type="button"
-            phx-click="clear_facet"
-            phx-value-facet={group.facet}
-            aria-label={"Drop the #{group.label} constraint"}
-            title="Loosen this constraint"
-            class="px-1 text-xs text-faint cursor-pointer hover:text-error"
+            phx-click="clear_origin"
+            phx-value-origin={section.origin}
+            aria-label={
+              if section.origin == :agent,
+                do: "Drop every constraint set by your agent",
+                else: "Drop every constraint set by you"
+            }
+            title={
+              if section.origin == :agent,
+                do: "Undo what the agent set",
+                else: "Keep only the agent's constraints"
+            }
+            class="text-[11px] text-muted underline cursor-pointer hover:text-error"
           >
-            ×
+            Drop these
           </button>
         </div>
         <button

@@ -254,11 +254,9 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
       # the human narrows to shirts; the agent adds a color the shopper never chose
       view |> element("#filter-category-#{ctx.shirts.id}") |> render_click()
 
-      assert has_element?(
-               view,
-               "#chip-group-category[data-origin='human'][data-hiding='1']",
-               "you"
-             )
+      assert has_element?(view, "#filters-by-human", "You")
+      refute has_element?(view, "#filters-by-agent")
+      assert has_element?(view, "#chip-group-category-human")
 
       ok!(view, "filter_products", %{
         "category" => ctx.shirts.id,
@@ -266,15 +264,10 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
         "size" => ["XL"]
       })
 
-      assert has_element?(view, "#chip-group-category[data-origin='human']")
-
-      assert has_element?(
-               view,
-               "#chip-group-color[data-origin='agent'][data-hiding='1']",
-               "✦ agent"
-             )
-
-      assert has_element?(view, "#chip-group-size[data-origin='agent'][data-hiding='0']")
+      assert has_element?(view, "#filters-by-human #chip-group-category-human")
+      assert has_element?(view, "#filters-by-agent", "Agent")
+      assert has_element?(view, "#filters-by-agent #chip-group-color-agent")
+      assert has_element?(view, "#filters-by-agent #chip-group-size-agent")
 
       state = ok!(view, "get_store_state").state
 
@@ -320,19 +313,39 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
              )
     end
 
+    test "a facet set by both sides shows in both sections and each owner's constraints drop as one", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      view |> element("#filter-category-#{ctx.shirts.id}") |> render_click()
+      ok!(view, "filter_products", %{"category" => ctx.shirts.id, "color" => ["black"]})
+      view |> element("#filter-color-blue") |> render_click()
+
+      assert has_element?(view, "#filters-by-agent #chip-group-color-agent", "Black")
+      assert has_element?(view, "#filters-by-human #chip-group-color-human", "Blue")
+
+      view
+      |> element("#filters-by-agent button[aria-label='Drop every constraint set by your agent']")
+      |> render_click()
+
+      assert_patch(view, ~p"/?category=#{ctx.shirts.id}&color[]=blue")
+      refute has_element?(view, "#filters-by-agent")
+      assert has_element?(view, "#filters-by-human #chip-group-category-human")
+      assert has_element?(view, "#filters-by-human #chip-group-color-human", "Blue")
+    end
+
     test "a facet with several values can be dropped as one constraint", ctx do
       {:ok, view, _html} = live(ctx.conn, ~p"/")
 
       ok!(view, "filter_products", %{"brand" => ["Columbia", "Patagonia"], "size" => ["XL"]})
-      assert has_element?(view, "#chip-group-brand[data-hiding='0']")
-      assert has_element?(view, "#chip-group-size[data-hiding='1']")
+      assert has_element?(view, "#chip-group-brand-agent")
+      assert has_element?(view, "#chip-group-size-agent")
 
       view
-      |> element("#chip-group-brand button[aria-label='Drop the Brand constraint']")
+      |> element("#chip-group-brand-agent button[aria-label='Drop the Brand constraint']")
       |> render_click()
 
       assert_patch(view, ~p"/?size[]=XL")
-      refute has_element?(view, "#chip-group-brand")
+      refute has_element?(view, "#chip-group-brand-agent")
       assert has_element?(view, "#agent-activity li[data-kind='human']", "Brand: Columbia")
       assert has_element?(view, "#agent-activity li[data-kind='human']", "Brand: Patagonia")
     end
