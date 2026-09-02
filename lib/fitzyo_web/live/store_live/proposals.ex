@@ -554,6 +554,7 @@ defmodule FitzyoWeb.StoreLive.Proposals do
           brand: v.product.brand,
           detail: "#{String.capitalize(v.color)} / #{v.size}",
           hex: v.color_hex,
+          image_url: v.product.image_url,
           price: v.price,
           reason: reason
         }
@@ -568,6 +569,7 @@ defmodule FitzyoWeb.StoreLive.Proposals do
           brand: nil,
           detail: nil,
           hex: nil,
+          image_url: nil,
           price: Decimal.new(0),
           reason: reason
         }

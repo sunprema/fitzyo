@@ -18,7 +18,8 @@ defmodule FitzyoWeb.StoreLiveTest do
         brand: "Columbia",
         fit: :relaxed,
         price: Decimal.new("45"),
-        activities: ["beach"]
+        activities: ["beach"],
+        image_url: "https://images.example/bahama.jpg"
       })
 
     short =
@@ -52,6 +53,18 @@ defmodule FitzyoWeb.StoreLiveTest do
       assert has_element?(view, "#product-#{shirt.id}[data-brand='Columbia']")
       assert has_element?(view, "#product-#{short.id}[data-category='#{short.category_id}']")
       assert has_element?(view, "#results-count", "products found")
+    end
+
+    test "a product photo shows when the catalog has one, initials otherwise", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      assert has_element?(
+               view,
+               "#product-#{ctx.shirt.id} img[src='https://images.example/bahama.jpg']"
+             )
+
+      refute has_element?(view, "#product-#{ctx.short.id} img")
+      assert has_element?(view, "#product-#{ctx.short.id} .fz-art", "QS")
     end
 
     test "search narrows results and shows a removable chip", %{

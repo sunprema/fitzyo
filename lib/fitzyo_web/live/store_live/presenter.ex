@@ -18,6 +18,7 @@ defmodule FitzyoWeb.StoreLive.Presenter do
       name: product.name,
       brand: product.brand,
       category: product.category_id,
+      image_url: product.image_url,
       price: price(product.price, product.currency),
       fit: to_string(product.fit),
       gender: to_string(product.gender),

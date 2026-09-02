@@ -110,7 +110,12 @@ defmodule Fitzyo.MixProject do
       {:gettext, "~> 1.0"},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
-      {:bandit, "~> 1.5"}
+      {:bandit, "~> 1.5"},
+      {:live_agent,
+       if(Mix.env() == :dev and File.dir?("/Volumes/x/projects/elixir_libs/live_agent"),
+         do: [path: "/Volumes/x/projects/elixir_libs/live_agent", override: true, only: :dev],
+         else: [github: "sunprema/live_agent", branch: "main", only: :dev]
+       )}
     ]
   end
 

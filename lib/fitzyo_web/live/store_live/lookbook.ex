@@ -196,6 +196,7 @@ defmodule FitzyoWeb.StoreLive.Lookbook do
              brand: product.brand,
              price: (variant && variant.price) || product.price,
              hex: (variant && variant.color_hex) || (first && first.color_hex),
+             image_url: product.image_url,
              detail: variant && "#{String.capitalize(variant.color)} / #{variant.size}",
              available: if(variant, do: variant.inventory_quantity > 0, else: product.available)
            }}

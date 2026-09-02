@@ -90,6 +90,7 @@ defmodule FitzyoWeb.StoreComponents do
   """
   attr :name, :string, required: true
   attr :hex, :string, default: nil
+  attr :image, :string, default: nil, doc: "product photo URL; the color tile shows until it loads"
   attr :caption, :string, default: nil
   attr :class, :any, default: nil
   slot :inner_block
@@ -103,12 +104,23 @@ defmodule FitzyoWeb.StoreComponents do
       style={"--fz-art: #{@hex}"}
       aria-hidden="true"
     >
-      <span class={[
-        "font-display text-4xl font-semibold tracking-wide select-none",
-        contrast_class(@hex)
-      ]}>
+      <span
+        :if={!@image}
+        class={[
+          "font-display text-4xl font-semibold tracking-wide select-none",
+          contrast_class(@hex)
+        ]}
+      >
         {initials(@name)}
       </span>
+      <img
+        :if={@image}
+        src={@image}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        class="absolute inset-0 size-full object-cover"
+      />
       <span
         :if={@caption}
         class={[
@@ -156,6 +168,7 @@ defmodule FitzyoWeb.StoreComponents do
         <.product_art
           name={@product.name}
           hex={@hero && @hero.hex}
+          image={@product.image_url}
           caption={@product.category_id}
           class="aspect-square w-full"
         >

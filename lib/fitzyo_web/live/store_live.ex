@@ -942,6 +942,7 @@ defmodule FitzyoWeb.StoreLive do
             <.product_art
               name={item.variant.product.name}
               hex={item.variant.color_hex}
+              image={item.variant.product.image_url}
               class="size-12 rounded-lg [&>span:first-child]:text-sm"
             />
           </.link>
@@ -1381,6 +1382,7 @@ defmodule FitzyoWeb.StoreLive do
         <.product_art
           name={@product.name}
           hex={@hex}
+          image={@product.image_url}
           caption={@product.category.name}
           class="aspect-square w-full rounded-[20px]"
         />
@@ -1719,6 +1721,7 @@ defmodule FitzyoWeb.StoreLive do
                       <.product_art
                         name={slot.product.name}
                         hex={slot.product.hex}
+                        image={slot.product.image_url}
                         class={[
                           "size-9 rounded-md [&>span:first-child]:text-[11px]",
                           slot.status == "have" && "opacity-50"
@@ -2072,6 +2075,7 @@ defmodule FitzyoWeb.StoreLive do
               <.product_art
                 name={Proposals.chosen(line).name}
                 hex={Proposals.chosen(line).hex}
+                image={Proposals.chosen(line).image_url}
                 class="size-10 shrink-0 rounded-lg [&>span:first-child]:text-xs"
               />
               <div class="min-w-0 flex-1">
@@ -2317,6 +2321,7 @@ defmodule FitzyoWeb.StoreLive do
       <.product_art
         name={@option.product.name}
         hex={@option.product.hex}
+        image={@option.product.image_url}
         class="size-11 shrink-0 rounded-lg [&>span:first-child]:text-sm"
       />
       <span class="min-w-0 flex-1">
@@ -2864,6 +2869,7 @@ defmodule FitzyoWeb.StoreLive do
       <.product_art
         name={@item.variant.product.name}
         hex={@item.variant.color_hex}
+        image={@item.variant.product.image_url}
         class="size-16 shrink-0 rounded-[10px] [&>span:first-child]:text-lg"
       />
       <div class="min-w-0 flex-1">

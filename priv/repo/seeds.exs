@@ -40,6 +40,7 @@ defmodule Fitzyo.Seeds.Catalog do
   @women_shoes ~w(6 7 8 9 10)
   @kid_shoes ~w(1Y 2Y 3Y 4Y 5Y 6Y)
   @hat_sizes ["S/M", "L/XL"]
+  @one_size ["OS"]
 
   @categories [
     %{id: "shirts", name: "Shirts", position: 1, description: "Tees, tops, and button-ups"},
@@ -692,14 +693,220 @@ defmodule Fitzyo.Seeds.Catalog do
        material: "cotton",
        activities: ~w(beach casual outdoor),
        description: "Packable cotton bucket hat with UPF 50."
-     }, ~w(yellow blue), @hat_sizes, nil, []}
+     }, ~w(yellow blue), @hat_sizes, nil, []},
+    # ----------------------------------------------------------- More pants
+    {"prod_1043",
+     %{
+       name: "XX Chino Standard Taper",
+       brand: "Levi's",
+       category_id: "pants",
+       price: 60,
+       gender: :men,
+       fit: :regular,
+       stretch: :medium,
+       cut: "tapered",
+       weight: "midweight",
+       material: "stretch cotton twill",
+       activities: ~w(casual dinner travel),
+       description: "Everyday chinos with a little stretch, dressy enough for dinner."
+     }, ~w(khaki navy olive), @men_pants, :men_pants, out_of_stock: [{"olive", "36x32"}]},
+    {"prod_1044",
+     %{
+       name: "Saturday Trail Pants",
+       brand: "Columbia",
+       category_id: "pants",
+       price: 65,
+       gender: :women,
+       fit: :regular,
+       stretch: :medium,
+       cut: "straight",
+       weight: "lightweight",
+       material: "stretch nylon",
+       activities: ~w(hiking outdoor travel),
+       description: "Quick-dry hiking pants with UPF 50 and a gusseted crotch."
+     }, ~w(khaki gray black), @women_jeans, :women_jeans, []},
+    {"prod_1045",
+     %{
+       name: "Palm Coast Linen Pants",
+       brand: "Tommy Bahama",
+       category_id: "pants",
+       price: 118,
+       gender: :women,
+       fit: :relaxed,
+       stretch: :none,
+       cut: "wide",
+       weight: "lightweight",
+       material: "linen",
+       activities: ~w(dinner casual beach),
+       description: "Wide-leg linen pants that pack flat and shake out wrinkle-free."
+     }, ~w(white sand navy), @women_tops, :women_tops, []},
+    {"prod_1046",
+     %{
+       name: "Kids Silver Ridge Pull-On Pants",
+       brand: "Columbia",
+       category_id: "pants",
+       price: 40,
+       gender: :boys,
+       age_group: :youth,
+       fit: :regular,
+       stretch: :low,
+       cut: "regular",
+       weight: "lightweight",
+       material: "nylon",
+       activities: ~w(hiking travel outdoor),
+       description: "Elastic-waist hiking pants that dry fast after a stream crossing."
+     }, ~w(khaki gray navy), @youth, :youth, []},
+    # --------------------------------------------------------- More dresses
+    {"prod_1047",
+     %{
+       name: "Sunset Wrap Dress",
+       brand: "Roxy",
+       category_id: "dresses",
+       price: 65,
+       gender: :women,
+       fit: :regular,
+       stretch: :low,
+       cut: "wrap",
+       weight: "lightweight",
+       material: "viscose",
+       activities: ~w(dinner beach casual),
+       description: "Flowy wrap dress with a tie waist for sunset dinners."
+     }, ~w(coral navy teal), @women_tops, :women_tops, []},
+    {"prod_1048",
+     %{
+       name: "Island Maxi Dress",
+       brand: "Tommy Bahama",
+       category_id: "dresses",
+       price: 138,
+       gender: :women,
+       fit: :relaxed,
+       stretch: :none,
+       cut: "a-line",
+       weight: "lightweight",
+       material: "cotton voile",
+       activities: ~w(dinner casual),
+       description: "Ankle-length cotton maxi with a smocked back and pockets."
+     }, ~w(blue white sand), @women_tops, :women_tops, out_of_stock: [{"white", "M"}]},
+    {"prod_1049",
+     %{
+       name: "Sanibel Shirt Dress",
+       brand: "Columbia",
+       category_id: "dresses",
+       price: 75,
+       gender: :women,
+       fit: :regular,
+       stretch: :low,
+       cut: "straight",
+       weight: "lightweight",
+       material: "nylon",
+       activities: ~w(travel hiking casual),
+       description: "UPF 40 shirt dress with a drawcord waist; hikes in the morning, lunch after."
+     }, ~w(khaki blue), @women_tops, :women_tops, []},
+    {"prod_1050",
+     %{
+       name: "Girls Twirl Dress",
+       brand: "Old Navy",
+       category_id: "dresses",
+       price: 20,
+       gender: :girls,
+       age_group: :youth,
+       fit: :regular,
+       stretch: :medium,
+       cut: "a-line",
+       weight: "lightweight",
+       material: "cotton jersey",
+       activities: ~w(casual beach),
+       description: "Soft jersey dress with a full skirt made for twirling."
+     }, ~w(pink blue yellow), @youth, :youth, []},
+    # ----------------------------------------------------- More accessories
+    {"prod_1051",
+     %{
+       name: "Coastal Straw Hat",
+       brand: "Roxy",
+       category_id: "accessories",
+       price: 36,
+       gender: :women,
+       fit: :regular,
+       stretch: :none,
+       material: "paper straw",
+       activities: ~w(beach casual),
+       description: "Wide-brim straw hat with a chin cord for windy beaches."
+     }, ~w(tan sand), @hat_sizes, nil, []},
+    {"prod_1052",
+     %{
+       name: "Coolhead II Ball Cap",
+       brand: "Columbia",
+       category_id: "accessories",
+       price: 25,
+       gender: :unisex,
+       fit: :regular,
+       stretch: :none,
+       material: "nylon",
+       activities: ~w(hiking running casual),
+       description: "Sweat-wicking cap with a UPF 50 brim."
+     }, ~w(navy gray khaki), @one_size, nil, []},
+    {"prod_1053",
+     %{
+       name: "Polarized Sunglasses",
+       brand: "Quiksilver",
+       category_id: "accessories",
+       price: 45,
+       gender: :unisex,
+       fit: :regular,
+       stretch: :none,
+       material: "acetate",
+       activities: ~w(beach hiking casual dinner),
+       description: "Polarized lenses that cut glare off the water."
+     }, ~w(black tan), @one_size, nil, []},
+    {"prod_1054",
+     %{
+       name: "Kids Flexible Sunglasses",
+       brand: "Roxy",
+       category_id: "accessories",
+       price: 18,
+       gender: :unisex,
+       age_group: :youth,
+       fit: :regular,
+       stretch: :none,
+       material: "rubberized frame",
+       activities: ~w(beach casual),
+       description: "Bendy UV400 shades that survive being sat on."
+     }, ~w(pink blue), @one_size, nil, []},
+    {"prod_1055",
+     %{
+       name: "Atom Sling 8L",
+       brand: "Patagonia",
+       category_id: "accessories",
+       price: 69,
+       gender: :unisex,
+       fit: :regular,
+       stretch: :none,
+       material: "recycled nylon",
+       activities: ~w(hiking travel sightseeing),
+       description: "Crossbody sling for a water bottle, phone, and sunscreen."
+     }, ~w(black navy sage), @one_size, nil, []},
+    {"prod_1056",
+     %{
+       name: "Sand-Free Beach Tote",
+       brand: "Roxy",
+       category_id: "accessories",
+       price: 32,
+       gender: :unisex,
+       fit: :regular,
+       stretch: :none,
+       material: "mesh",
+       activities: ~w(beach),
+       description: "Mesh tote that lets the sand fall out before it reaches the car."
+     }, ~w(sand navy coral), @one_size, nil, []}
   ]
 
   def run do
     Enum.each(@categories, &Catalog.create_category!/1)
+    images = product_images()
 
     Enum.each(@products, fn {id, attrs, colors, sizes, guide, opts} ->
-      product = Catalog.create_product!(Map.put(attrs, :id, id))
+      attrs = Map.merge(attrs, %{id: id, image_url: images[id] && images[id].url})
+      product = Catalog.create_product!(attrs)
       seed_variants(product, colors, sizes, opts)
       seed_size_guide(product, sizes, guide)
     end)
@@ -707,6 +914,12 @@ defmodule Fitzyo.Seeds.Catalog do
     IO.puts(
       "Seeded #{length(@categories)} categories and #{length(@products)} products with variants."
     )
+  end
+
+  # Unsplash photos keyed by product id; see priv/repo/product_images.exs.
+  defp product_images do
+    {images, _} = Code.eval_file(Path.join(__DIR__, "product_images.exs"))
+    images
   end
 
   defp seed_variants(product, colors, sizes, opts) do
