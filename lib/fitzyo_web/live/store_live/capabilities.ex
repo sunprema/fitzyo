@@ -34,8 +34,8 @@ defmodule FitzyoWeb.StoreLive.Capabilities do
      ~w(get_store_info get_categories search_products filter_products get_product get_variants
         get_size_guide find_matching_variants compare_products get_cart get_store_state)},
     {"suggest",
-     ~w(recommend_product clear_annotations present_plan agent_update ask_human focus_product
-        focus_filter register_party_member remove_party_member)},
+     ~w(recommend_product clear_annotations present_plan present_lookbook agent_update ask_human
+        focus_product focus_filter register_party_member remove_party_member)},
     {"cart", ~w(add_to_cart remove_from_cart update_cart_item clear_cart propose_cart)}
   ]
 

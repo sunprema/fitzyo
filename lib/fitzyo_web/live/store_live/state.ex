@@ -56,6 +56,7 @@ defmodule FitzyoWeb.StoreLive.State do
       excluded_by: %{},
       members: [],
       member_fits: %{},
+      lookbook: nil,
       sizes: [],
       results_count: 0,
       product: nil,

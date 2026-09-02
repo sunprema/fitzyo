@@ -378,6 +378,22 @@ try {
   }
 
   await call("present_plan", plan(status));
+
+  // The picks laid out day by day above the grid. Day labels are the agent's
+  // words; "have" slots are plain text, so the wardrobe stays private.
+  const cartNow = await call("get_cart");
+  const pick = (who, text) => { const pid = status[`${text}:pid`]; const line = cartNow.cart.items.find((i) => i.product_id === pid && i.label === who); return line ? { label: who, product_id: pid, variant_id: line.variant_id } : null; };
+  const days = [
+    { label: "Day 1: Beach arrival", activities: ["beach"], slots: [pick("Dad", "2 lightweight travel shirts"), { label: "Dad", text: "casual shorts", status: "have" }, pick("Mom", "Long-sleeve rash guard"), pick("Milo", "UPF rash guard"), pick("Milo", "Sun hat")] },
+    { label: "Day 2: Volcanic hike", activities: ["hiking"], slots: [pick("Dad", "1 hiking short"), { label: "Dad", text: "casual shirt", status: "have" }, { label: "Mom", text: "tank top", status: "have" }, { label: "Milo", text: "t-shirt", status: "have" }] },
+    { label: "Day 3: Snorkel & swim", activities: ["swim", "beach"], slots: [pick("Dad", "New swim trunks"), pick("Mom", "Sandals"), pick("Milo", "Sandals"), { label: "Milo", text: "boardshorts", status: "have" }] },
+    { label: "Day 4: Luau dinner", activities: ["dinner"], slots: [pick("Mom", "1 dinner dress"), pick("Dad", "1 linen dinner shirt") || { label: "Dad", product_id: "prod_1003", status: "need", note: "skipped for budget" }] },
+    { label: "Day 5: Beach again", activities: ["beach"], slots: [pick("Dad", "2 lightweight travel shirts"), pick("Milo", "UPF rash guard"), pick("Mom", "Long-sleeve rash guard")] },
+  ].map((d) => ({ ...d, slots: d.slots.filter(Boolean) }));
+  await call("present_lookbook", { title: "Hawaii — 7 day lookbook", subtitle: "Beach, hike, snorkel, one luau", days });
+  await sleep(500);
+  await screenshot("1e-lookbook");
+
   const cart = await call("get_cart");
   const perMember = Object.entries(cart.cart.by_label).map(([who, b]) => `${who} $${b.subtotal}${b.budget ? ` of $${b.budget}` : ""}${b.over_by > 0 ? " (over)" : ""}`).join(", ");
   console.log(`\n🛍  Cart: ${cart.cart.item_count} items, $${cart.cart.subtotal} of $${BUDGET} budget — ${perMember}`);

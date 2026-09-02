@@ -183,6 +183,7 @@ defmodule FitzyoWeb.StoreLive.Presenter do
       annotations:
         assigns.annotations |> Map.values() |> List.flatten() |> Enum.map(&annotation/1),
       plan: assigns.plan,
+      lookbook: FitzyoWeb.StoreLive.Lookbook.summary(assigns.lookbook, assigns.cart),
       pending_question: FitzyoWeb.StoreLive.Questions.pending(assigns.question),
       pending_proposal: FitzyoWeb.StoreLive.Proposals.pending(assigns.proposal, assigns.cart),
       members: Enum.map(assigns.members, &FitzyoWeb.StoreLive.Members.summary/1),

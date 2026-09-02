@@ -51,6 +51,7 @@ the reply.
 | `register_party_member` | state | Registers one person as derived constraints; unlocks `member:` and per-member badges and budgets |
 | `remove_party_member` | state | Forgets a registered person and clears their badges |
 | `present_plan` | state | Shows the agent's plan in the agent panel |
+| `present_lookbook` | state | Lays the trip out as a day-by-day timeline above the grid; the shopper edits it in place |
 | `agent_update` | state | Banner status, progress, and streamed thoughts |
 | `ask_human` | blocking | Ask the shopper a question in the agent panel; resolves when they answer |
 | `propose_cart` | blocking | One priced, grouped basket the shopper accepts in a single action |
@@ -147,7 +148,8 @@ wardrobe), then executes against the store. A good sequence:
    is untouched.
 10. **Tidy**: `clear_annotations` for a need the shopper skipped, so no
     stale "Fits" badge or recommendation lingers.
-11. **Update the plan**: `present_plan` again with items marked `added`.
+11. **Update the plan**: `present_plan` again with items marked `added`, and
+    `present_lookbook` to lay the picks out day by day (§4i).
 12. **Hand off**: `focus_product` on anything worth a second look, then tell
     the human the cart is ready for review.
 
@@ -316,6 +318,37 @@ Your annotations have a lifecycle too: `clear_annotations` by label,
 product, or source, and the shopper can dismiss any badge from a card.
 Compare controls sit next to every set you assemble (a member's matches, a
 proposal group), so `compare_products` has a human counterpart.
+
+## 4i. The lookbook: `present_lookbook`
+
+Once the picks exist, lay the trip out as a timeline rather than a list.
+One column per day, one slot per person per item; slots point at a variant
+you picked, or carry plain text with `status: "have"` for something they
+already own:
+
+```json
+{"title": "Hawaii — 7 day lookbook", "subtitle": "Beach, hiking, one luau",
+ "days": [
+   {"label": "Day 1: Beach arrival", "activities": ["beach"],
+    "slots": [{"label": "Dad", "product_id": "prod_1001", "variant_id": "prod_1001_blue_xl", "note": "quick-dry"},
+              {"label": "Dad", "text": "navy swim trunks", "status": "have"}]},
+   {"label": "Day 2: Volcanic hike", "activities": ["hiking"],
+    "slots": [{"label": "Dad", "product_id": "prod_1009", "variant_id": "prod_1009_khaki_36"},
+              {"label": "Milo", "product_id": "prod_1038", "status": "need"}]}]}
+```
+
+The strip renders above the results grid (the grid stays), priced by the
+store: it marks what is already in the cart, notes an item worn on several
+days ("also Day 5"), and totals what is still to buy. Day labels and
+activities are opaque strings you chose; the retailer learns nothing about
+the destination beyond what you put in them, and nothing about the wardrobe
+beyond the `have` text.
+
+The shopper edits it in place: **Add to cart**, **Have it** (a pick they
+already own), or × to drop a slot. Each edit is a human entry in the feed
+and `get_store_state.lookbook` returns their version (`edited_by_human`,
+`in_cart`, `to_buy_count`), so re-plan from that rather than from what you
+sent. Sending the tool again replaces the lookbook; `days: []` clears it.
 
 ## 5. Human override
 

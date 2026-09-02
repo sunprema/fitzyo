@@ -19,7 +19,7 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
   alias Fitzyo.Catalog
   alias Fitzyo.Catalog.Types
   alias Fitzyo.Commerce
-  alias FitzyoWeb.StoreLive.{Capabilities, Filters, Members, Presenter, State}
+  alias FitzyoWeb.StoreLive.{Capabilities, Filters, Lookbook, Members, Presenter, State}
 
   @store %{
     id: "fitzyo-retail-demo",
@@ -304,6 +304,7 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
           ),
         annotations: @state_change
       },
+      Lookbook.spec(),
       %{
         name: "agent_update",
         description:
@@ -603,6 +604,41 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
         )
 
       {:ok, %{success: true, title: title, groups: length(plan.groups)}, socket}
+    end
+  end
+
+  defp run("present_lookbook", %{"days" => days} = input, socket) when is_list(days) do
+    case Lookbook.build(input) do
+      {:ok, nil} ->
+        {:ok, %{success: true, cleared: true},
+         socket
+         |> Phoenix.Component.assign(lookbook: nil)
+         |> log("present_lookbook([])", "cleared")}
+
+      {:ok, lookbook} ->
+        data = Lookbook.view_data(lookbook, socket.assigns.cart)
+        slots = lookbook.days |> Enum.flat_map(& &1.slots) |> length()
+
+        socket =
+          socket
+          |> Phoenix.Component.assign(lookbook: lookbook)
+          |> State.focus_element("lookbook")
+          |> log(
+            ~s|present_lookbook("#{lookbook.title}")|,
+            "#{length(lookbook.days)} days, #{slots} slots, #{data.to_buy_count} to buy (#{money(data.to_buy_total)})"
+          )
+
+        {:ok,
+         %{
+           success: true,
+           lookbook_id: lookbook.id,
+           days: length(lookbook.days),
+           to_buy_count: data.to_buy_count,
+           to_buy_total: Presenter.number(data.to_buy_total)
+         }, socket}
+
+      {:error, message} ->
+        error("INVALID_OPERATION", message)
     end
   end
 

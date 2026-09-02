@@ -16,8 +16,8 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
                  get_variants get_size_guide find_matching_variants compare_products get_cart
                  add_to_cart remove_from_cart update_cart_item clear_cart recommend_product
                  clear_annotations register_party_member remove_party_member present_plan
-                 agent_update ask_human propose_cart request_capability get_store_state
-                 focus_product focus_filter)
+                 present_lookbook agent_update ask_human propose_cart request_capability
+                 get_store_state focus_product focus_filter)
 
   setup do
     shirts =
@@ -1547,6 +1547,181 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
 
       refute has_element?(view, "#agent-proposal")
       assert ok!(view, "get_cart").cart.item_count == 0
+    end
+  end
+
+  describe "lookbook" do
+    test "present_lookbook renders a day strip the human can edit, and the agent sees the edits",
+         ctx do
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
+      blue_xl = "#{ctx.columbia.id}_blue_xl"
+      short_32 = "#{ctx.short.id}_black_32"
+
+      result =
+        ok!(view, "present_lookbook", %{
+          "title" => "Hawaii — 3 day lookbook",
+          "subtitle" => "Beach, hike, luau",
+          "days" => [
+            %{
+              "label" => "Day 1: Beach arrival",
+              "activities" => ["Beach"],
+              "slots" => [
+                %{
+                  "label" => "Dad",
+                  "product_id" => ctx.columbia.id,
+                  "variant_id" => blue_xl,
+                  "note" => "quick-dry"
+                },
+                %{"label" => "Dad", "text" => "navy swim trunks", "status" => "have"}
+              ]
+            },
+            %{
+              "label" => "Day 2: Volcanic hike",
+              "activities" => ["hiking"],
+              "slots" => [
+                %{"label" => "Dad", "product_id" => ctx.short.id, "variant_id" => short_32},
+                %{"label" => "Milo", "product_id" => ctx.patagonia.id, "status" => "need"}
+              ]
+            },
+            %{
+              "label" => "Day 3: Luau",
+              "slots" => [
+                %{"label" => "Dad", "product_id" => ctx.columbia.id, "variant_id" => blue_xl}
+              ]
+            }
+          ]
+        })
+
+      assert result.days == 3
+
+      # the shirt is worn twice but bought once; the have slot and the unsized need slot are not counted
+      assert result.to_buy_count == 2
+      assert result.to_buy_total == 124.0
+
+      assert has_element?(view, "#lookbook[data-to-buy='2']", "Hawaii — 3 day lookbook")
+      assert has_element?(view, "#lookbook-day-0", "Day 1: Beach arrival")
+      assert has_element?(view, "#lookbook-day-0 span", "beach")
+
+      assert has_element?(
+               view,
+               "#lookbook-slot-0-0[data-label='Dad'][data-variant-id='#{blue_xl}']",
+               "Bahama Shirt"
+             )
+
+      assert has_element?(view, "#lookbook-slot-0-0", "also Day 3: Luau")
+      assert has_element?(view, "#lookbook-slot-0-1[data-status='have']", "navy swim trunks")
+      assert has_element?(view, "#lookbook-slot-1-1[data-status='need']", "still looking")
+      assert has_element?(view, "#lookbook-to-buy", "2 to buy · $124.00")
+      # the grid is still there underneath
+      assert has_element?(view, "#results-grid")
+
+      # human: add Day 2's short to the cart from the strip
+      view |> element("#lookbook-slot-1-0 button", "Add to cart") |> render_click()
+      assert has_element?(view, "#lookbook-slot-1-0[data-in-cart='true']", "in cart")
+      assert has_element?(view, "#lookbook-to-buy", "1 to buy · $45.00")
+
+      assert has_element?(
+               view,
+               "#agent-activity li[data-kind='human']",
+               "Added Dad's Quandary Short to the cart from the lookbook"
+             )
+
+      assert [%{variant_id: ^short_32, label: "Dad", source: "human"}] =
+               ok!(view, "get_cart").cart.items
+
+      # human: the shirt is something Dad already owns after all; it is owned on Day 3 too
+      view |> element("#lookbook-slot-0-0 button", "Have it") |> render_click()
+      assert has_element?(view, "#lookbook-slot-0-0[data-status='have']")
+      assert has_element?(view, "#lookbook-slot-2-0[data-status='have']")
+      assert has_element?(view, "#lookbook-to-buy", "0 to buy · $0.00")
+
+      assert has_element?(
+               view,
+               "#agent-activity li[data-kind='human']",
+               "already owned (Day 1: Beach arrival, Day 3: Luau)"
+             )
+
+      # human: drop Milo's slot
+      view |> element("#lookbook-slot-1-1 button[aria-label^='Drop']") |> render_click()
+      refute has_element?(view, "#lookbook-slot-1-1")
+
+      state = ok!(view, "get_store_state").state
+      assert state.lookbook.title == "Hawaii — 3 day lookbook"
+      assert state.lookbook.to_buy_count == 0
+      [day1, day2, _day3] = state.lookbook.days
+
+      assert [
+               %{status: "have", edited_by_human: true, variant_id: ^blue_xl},
+               %{status: "have", text: "navy swim trunks"}
+             ] = day1.slots
+
+      assert [%{variant_id: ^short_32, in_cart: true}] = day2.slots
+
+      # the agent replaces it, and can clear it
+      ok!(view, "present_lookbook", %{
+        "days" => [
+          %{
+            "label" => "Day 1",
+            "slots" => [%{"label" => "Mom", "text" => "sundress", "status" => "have"}]
+          }
+        ]
+      })
+
+      assert has_element?(view, "#lookbook-slot-0-0", "sundress")
+      refute has_element?(view, "#lookbook-day-1")
+      assert ok!(view, "present_lookbook", %{"days" => []}).cleared
+      refute has_element?(view, "#lookbook")
+      assert ok!(view, "get_store_state").state.lookbook == nil
+
+      # validation
+      assert %{
+               "code" => "INVALID_OPERATION",
+               "message" => "day 1: slot 1: needs a product_id or text"
+             } =
+               error!(view, "present_lookbook", %{
+                 "days" => [%{"label" => "Day 1", "slots" => [%{"label" => "Dad"}]}]
+               })
+
+      assert %{"code" => "INVALID_OPERATION"} =
+               error!(view, "present_lookbook", %{
+                 "days" => [
+                   %{
+                     "label" => "Day 1",
+                     "slots" => [%{"label" => "Dad", "product_id" => "ghost"}]
+                   }
+                 ]
+               })
+
+      assert %{"code" => "INVALID_OPERATION"} =
+               error!(view, "present_lookbook", %{
+                 "days" => [
+                   %{
+                     "label" => "Day 1",
+                     "slots" => [
+                       %{
+                         "label" => "Dad",
+                         "product_id" => ctx.columbia.id,
+                         "variant_id" => "nope"
+                       }
+                     ]
+                   }
+                 ]
+               })
+    end
+
+    test "the human can dismiss the lookbook, and it needs only the suggest tier", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      ok!(view, "present_lookbook", %{
+        "days" => [
+          %{"label" => "Day 1", "slots" => [%{"label" => "Dad", "product_id" => ctx.columbia.id}]}
+        ]
+      })
+
+      assert has_element?(view, "#lookbook")
+      view |> element("#dismiss-lookbook") |> render_click()
+      refute has_element?(view, "#lookbook")
+      assert has_element?(view, "#agent-activity li[data-kind='human']", "Dismissed the lookbook")
     end
   end
 

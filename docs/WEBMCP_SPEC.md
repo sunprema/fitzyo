@@ -223,6 +223,7 @@ UI Navigation
 | `register_party_member`  | State      | Register derived constraints for one person (§62) |
 | `remove_party_member`    | State      | Forget a registered person           |
 | `present_plan`           | State      | Show the agent's plan                |
+| `present_lookbook`       | State      | Day-by-day timeline of the picks (§67) |
 | `agent_update`           | State      | Banner, progress, streamed thoughts  |
 | `ask_human`              | Blocking   | Hand a decision to the shopper       |
 | `propose_cart`           | Blocking   | One priced basket, one approval      |
@@ -2409,3 +2410,26 @@ the shopper swapped a proposed line for an alternative the agent offered,
 `by_source` summary (`human`, `agent`, `proposal`, `substituted`); the
 confirmation lists each line with its badge and the activity feed records
 the split next to the order number.
+
+---
+
+# 67. Travel Lookbook
+
+`present_lookbook` renders the agent's plan as a horizontal timeline above
+the results grid: one column per day (`label`, `activities`), one slot per
+person per item. A slot is either a variant the agent picked (`product_id`,
+optional `variant_id`, `status: picked | need`) or plain text with
+`status: have` for something the family already owns. Day labels and
+activities are opaque to the store.
+
+The store resolves each slot to a priced card, marks slots whose variant is
+in the cart, notes a variant worn on several days, and totals what is still
+to buy (available, not owned, not yet in the cart, counted once).
+
+The human edits the strip in place (drop a slot, mark it owned, add it to
+the cart with their label); each edit is a human feed entry.
+`get_store_state.lookbook` returns the edited version with `in_cart`,
+`edited_by_human`, `to_buy_count`, and `to_buy_total`. Sending the tool
+again replaces the lookbook; `days: []` clears it; the human can dismiss it.
+The grid is never replaced: the lookbook is a second view of the same
+state, not an AI-only mode.

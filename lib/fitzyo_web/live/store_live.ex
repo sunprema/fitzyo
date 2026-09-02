@@ -33,6 +33,7 @@ defmodule FitzyoWeb.StoreLive do
     AgentTools,
     Capabilities,
     Filters,
+    Lookbook,
     Members,
     Proposals,
     Questions,
@@ -205,6 +206,39 @@ defmodule FitzyoWeb.StoreLive do
 
   def handle_event("dismiss_plan", _params, socket) do
     {:noreply, State.clear_plan(socket)}
+  end
+
+  # ---------------------------------------------------------------- events: lookbook (human edits)
+
+  def handle_event("lookbook_remove", %{"day" => day, "slot" => slot}, socket) do
+    {:noreply, Lookbook.remove_slot(socket, String.to_integer(day), String.to_integer(slot))}
+  end
+
+  def handle_event("lookbook_have", %{"day" => day, "slot" => slot}, socket) do
+    {:noreply, Lookbook.toggle_have(socket, String.to_integer(day), String.to_integer(slot))}
+  end
+
+  def handle_event("lookbook_add", %{"day" => day, "slot" => slot}, socket) do
+    case Lookbook.slot(socket.assigns.lookbook, String.to_integer(day), String.to_integer(slot)) do
+      %{product: %{variant_id: variant_id}} = entry when is_binary(variant_id) ->
+        case Commerce.add_to_cart(socket.assigns.cart_id, variant_id, %{label: entry.label}) do
+          {:ok, _} ->
+            {:noreply,
+             socket
+             |> State.load_cart()
+             |> State.log_human("Added #{Lookbook.describe(entry)} to the cart from the lookbook")}
+
+          {:error, error} ->
+            {:noreply, put_flash(socket, :error, Fitzyo.Errors.message(error))}
+        end
+
+      _ ->
+        {:noreply, put_flash(socket, :error, "Pick a size on the product page first.")}
+    end
+  end
+
+  def handle_event("dismiss_lookbook", _params, socket) do
+    {:noreply, socket |> assign(lookbook: nil) |> State.log_human("Dismissed the lookbook")}
   end
 
   def handle_event("remove_member", %{"label" => label}, socket) do
@@ -597,6 +631,7 @@ defmodule FitzyoWeb.StoreLive do
                 annotations={State.annotations_for(@annotations, @product.id)}
               />
             <% else %>
+              <.lookbook :if={@lookbook} lookbook={@lookbook} cart={@cart} filters={@filters} />
               <.comparison :if={@comparison != []} products={@comparison} filters={@filters} />
               <.results
                 filters={@filters}
@@ -1525,6 +1560,227 @@ defmodule FitzyoWeb.StoreLive do
         </section>
       </div>
     </div>
+    """
+  end
+
+  # ---------------------------------------------------------------- lookbook
+
+  attr :lookbook, :map, required: true
+  attr :cart, :map, required: true
+  attr :filters, Filters, required: true
+
+  defp lookbook(assigns) do
+    assigns = assign(assigns, data: Lookbook.view_data(assigns.lookbook, assigns.cart))
+
+    ~H"""
+    <section
+      id="lookbook"
+      class="fz-fade mb-5 rounded-2xl border border-mint-dark bg-mint/40 p-4 dark:bg-base-200"
+      aria-labelledby="lookbook-title"
+      data-lookbook-id={@lookbook.id}
+      data-to-buy={@data.to_buy_count}
+    >
+      <div class="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <div class="text-[11px] font-bold uppercase tracking-wider text-secondary">
+            ✦ FitzYo Travel Lookbook
+          </div>
+          <h2 id="lookbook-title" class="font-display text-lg font-semibold leading-tight">
+            {@lookbook.title}
+          </h2>
+          <p :if={@lookbook.subtitle} class="text-xs text-muted">{@lookbook.subtitle}</p>
+        </div>
+        <div class="flex shrink-0 items-center gap-3">
+          <span id="lookbook-to-buy" class="text-[12px] font-semibold text-secondary">
+            {@data.to_buy_count} to buy · {format_price(@data.to_buy_total)}
+          </span>
+          <button
+            type="button"
+            id="dismiss-lookbook"
+            phx-click="dismiss_lookbook"
+            aria-label="Dismiss lookbook"
+            class="text-sm text-faint cursor-pointer hover:text-error"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+
+      <div class="fz-scroll flex items-stretch gap-1 overflow-x-auto pb-2">
+        <%= for {day, index} <- Enum.with_index(@lookbook.days) do %>
+          <span
+            :if={index > 0}
+            class="self-start pt-3 text-base text-faint select-none"
+            aria-hidden="true"
+          >
+            ›
+          </span>
+          <article
+            id={"lookbook-day-#{day.key}"}
+            data-day-key={day.key}
+            class="flex w-[212px] shrink-0 flex-col rounded-xl border border-base-300 bg-base-100 p-2.5"
+          >
+            <div class="mb-2">
+              <div class="text-[13px] font-bold leading-snug">{day.label}</div>
+              <div :if={day.activities != []} class="mt-1 flex flex-wrap gap-1">
+                <span
+                  :for={activity <- day.activities}
+                  class="rounded-full bg-base-200 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-muted"
+                >
+                  {activity}
+                </span>
+              </div>
+            </div>
+            <ul class="flex flex-col gap-1.5">
+              <li
+                :for={slot <- day.slots}
+                id={"lookbook-slot-#{day.key}-#{slot.key}"}
+                data-label={slot.label}
+                data-status={slot.status}
+                data-variant-id={slot.product && slot.product.variant_id}
+                data-in-cart={
+                  to_string(
+                    slot.product != nil and MapSet.member?(@data.in_cart, slot.product.variant_id)
+                  )
+                }
+                class={[
+                  "rounded-lg border p-1.5 text-[11px]",
+                  if(slot.status == "have",
+                    do: "border-dashed border-base-300 bg-base-200/60 text-muted",
+                    else: "border-base-300 bg-base-100"
+                  )
+                ]}
+              >
+                <div class="flex items-start gap-1.5">
+                  <%= if slot.product do %>
+                    <.link patch={product_path(slot.product.product_id, @filters)} class="shrink-0">
+                      <.product_art
+                        name={slot.product.name}
+                        hex={slot.product.hex}
+                        class={[
+                          "size-9 rounded-md [&>span:first-child]:text-[11px]",
+                          slot.status == "have" && "opacity-50"
+                        ]}
+                      />
+                    </.link>
+                  <% else %>
+                    <span class="flex size-9 shrink-0 items-center justify-center rounded-md bg-base-200 text-[10px] text-faint">
+                      {if slot.status == "need", do: "?", else: "✓"}
+                    </span>
+                  <% end %>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-1">
+                      <span class="rounded-full bg-accent px-1.5 py-px text-[9px] font-bold text-accent-content">
+                        {slot.label}
+                      </span>
+                      <span
+                        :if={slot.status == "have"}
+                        class="text-[9px] font-semibold uppercase tracking-wide"
+                      >
+                        already have
+                      </span>
+                      <span
+                        :if={slot.status == "need"}
+                        class="text-[9px] font-semibold uppercase tracking-wide text-accent"
+                      >
+                        still looking
+                      </span>
+                      <span
+                        :if={slot.product && MapSet.member?(@data.in_cart, slot.product.variant_id)}
+                        class="text-[9px] font-semibold uppercase tracking-wide text-primary"
+                      >
+                        ✓ in cart
+                      </span>
+                    </div>
+                    <%= if slot.product do %>
+                      <.link
+                        patch={product_path(slot.product.product_id, @filters)}
+                        class="block truncate font-semibold leading-snug hover:underline"
+                      >
+                        {slot.product.name}
+                      </.link>
+                      <div class="truncate text-[10px] text-muted">
+                        {slot.product.detail || slot.product.brand} · {format_price(
+                          slot.product.price
+                        )}
+                        <span :if={!slot.product.available} class="text-error"> · sold out</span>
+                      </div>
+                    <% else %>
+                      <div class="truncate font-semibold leading-snug">
+                        {slot.text || "Still looking"}
+                      </div>
+                    <% end %>
+                    <div
+                      :if={
+                        slot.product && slot.product.variant_id &&
+                          length(@data.worn_on[slot.product.variant_id] || []) > 1
+                      }
+                      class="truncate text-[10px] text-secondary"
+                      title={Enum.join(@data.worn_on[slot.product.variant_id], ", ")}
+                    >
+                      also {@data.worn_on[slot.product.variant_id]
+                      |> List.delete_at(
+                        Enum.find_index(@data.worn_on[slot.product.variant_id], &(&1 == day.label)) ||
+                          0
+                      )
+                      |> Enum.join(", ")}
+                    </div>
+                    <div
+                      :if={slot.note}
+                      class="truncate text-[10px] italic text-muted"
+                      title={slot.note}
+                    >
+                      {slot.note}
+                    </div>
+                  </div>
+                </div>
+                <div class="mt-1 flex items-center justify-between gap-1 text-[10px]">
+                  <div class="flex gap-2">
+                    <button
+                      :if={
+                        slot.product && slot.product.variant_id && slot.product.available &&
+                          slot.status != "have" &&
+                          not MapSet.member?(@data.in_cart, slot.product.variant_id)
+                      }
+                      type="button"
+                      phx-click="lookbook_add"
+                      phx-value-day={day.key}
+                      phx-value-slot={slot.key}
+                      class="font-semibold text-primary cursor-pointer hover:underline"
+                    >
+                      Add to cart
+                    </button>
+                    <button
+                      :if={slot.status != "need"}
+                      type="button"
+                      phx-click="lookbook_have"
+                      phx-value-day={day.key}
+                      phx-value-slot={slot.key}
+                      class="text-muted cursor-pointer hover:underline"
+                    >
+                      {if slot.status == "have", do: "Need it", else: "Have it"}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    phx-click="lookbook_remove"
+                    phx-value-day={day.key}
+                    phx-value-slot={slot.key}
+                    aria-label={"Drop #{Lookbook.describe(slot)} from #{day.label}"}
+                    class="text-faint cursor-pointer hover:text-error"
+                  >
+                    ×
+                  </button>
+                </div>
+              </li>
+            </ul>
+          </article>
+        <% end %>
+      </div>
+      <p class="mt-1 text-[10px] text-faint">
+        Laid out by your agent from your private context. Drop, keep, or add any item; your agent sees your version.
+      </p>
+    </section>
     """
   end
 
