@@ -86,6 +86,7 @@ defmodule FitzyoWeb do
       import Phoenix.HTML
       # Core UI components
       import FitzyoWeb.CoreComponents
+      import FitzyoWeb.StoreComponents
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS

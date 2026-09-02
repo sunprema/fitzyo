@@ -54,7 +54,8 @@ config :spark,
 
 config :fitzyo,
   ecto_repos: [Fitzyo.Repo],
-  generators: [timestamp_type: :utc_datetime]
+  generators: [timestamp_type: :utc_datetime],
+  ash_domains: [Fitzyo.Catalog, Fitzyo.Commerce]
 
 # Configure the endpoint
 config :fitzyo, FitzyoWeb.Endpoint,

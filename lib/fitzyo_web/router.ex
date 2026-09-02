@@ -8,6 +8,7 @@ defmodule FitzyoWeb.Router do
     plug :put_root_layout, html: {FitzyoWeb.Layouts, :root}
     plug :protect_from_forgery
     plug :put_secure_browser_headers
+    plug FitzyoWeb.Plugs.CartSession
   end
 
   pipeline :api do
@@ -17,7 +18,8 @@ defmodule FitzyoWeb.Router do
   scope "/", FitzyoWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live "/", StoreLive, :index
+    live "/products/:id", StoreLive, :show
   end
 
   # Other scopes may use custom stacks.

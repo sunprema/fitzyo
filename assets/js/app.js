@@ -23,14 +23,53 @@ import "phoenix_html"
 import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {hooks as colocatedHooks} from "phoenix-colocated/fitzyo"
-import {WebMcp} from "ash_web_mcp/assets/js/web_mcp"
+import {WebMcp as WebMcpCore} from "ash_web_mcp/assets/js/web_mcp"
 import topbar from "../vendor/topbar"
+
+// FitzYo wraps the ash_web_mcp transport hook so the LiveView can show
+// whether an agent is actually attached (native modelContext) or whether the
+// page is waiting on the postMessage bridge.
+const WebMcp = {
+  ...WebMcpCore,
+  mounted() {
+    WebMcpCore.mounted.call(this)
+    let reported = null
+    const report = () => {
+      if (this.native !== reported) {
+        reported = this.native
+        this.pushEvent("webmcp:transport", {native: !!this.native, tools: this.wireTools.length})
+      }
+    }
+    report()
+    this.transportWatch = setInterval(report, 1000)
+  },
+  destroyed() {
+    clearInterval(this.transportWatch)
+    WebMcpCore.destroyed.call(this)
+  },
+}
+
+// Scrolls a semantic element into view and flashes a highlight when an agent
+// calls focus_product / focus_filter (or when the cart badge changes).
+const FzFocus = {
+  mounted() {
+    this.handleEvent("fz:focus", ({id}) => {
+      const el = document.getElementById(id)
+      if (!el) return
+      el.scrollIntoView({behavior: "smooth", block: "center", inline: "nearest"})
+      el.classList.remove("fz-focus-ring")
+      void el.offsetWidth
+      el.classList.add("fz-focus-ring")
+      setTimeout(() => el.classList.remove("fz-focus-ring"), 2200)
+    })
+  },
+}
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, WebMcp},
+  hooks: {...colocatedHooks, WebMcp, FzFocus},
 })
 
 // Show progress bar on live navigation and form submits
