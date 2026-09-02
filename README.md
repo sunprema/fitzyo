@@ -17,6 +17,25 @@ mix phx.server   # http://localhost:4000
 from `priv/repo/seeds.exs`. Re-running the seeds is safe; product and variant
 ids stay stable.
 
+## Demo: an external agent shops for the family
+
+FitzYo has no built-in intelligence. A WebMCP-capable agent (a browser or
+extension that provides `navigator.modelContext`, or a shell using the
+postMessage bridge) attaches to the store page, reads its 21 tools, and drives
+it using the shopper's private context in `context/`:
+
+- `context/FAMILY.md` — sizes and preferences for Dad, Mom, and Milo
+- `context/WARDROBE.md` — what they already own
+- `context/TRIP.md` — seven days in Maui, itinerary, $600 budget
+
+`docs/AGENT_PLAYBOOK.md` describes the tool surface, the privacy rule, and the
+Hawaii sequence an agent should run. To rehearse it without an agent:
+
+```sh
+mix phx.server
+node scripts/agent_rehearsal.mjs http://localhost:4000   # needs Chrome + Node 22+
+```
+
 ## Layout
 
 - `lib/fitzyo/catalog` — Ash domain for categories, products, variants, and
