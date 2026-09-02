@@ -236,7 +236,7 @@ defmodule FitzyoWeb.StoreLive.Proposals do
       substituted: substituted,
       unavailable: proposal.unavailable ++ Enum.reverse(failed),
       cart: Presenter.cart_totals(cart),
-      budget: budget_result(proposal.budget, cart.subtotal)
+      budget: budget_result(proposal.budget, applied_total(applied), cart.subtotal)
     }
 
     note =
@@ -299,11 +299,12 @@ defmodule FitzyoWeb.StoreLive.Proposals do
 
   def chosen(line), do: Enum.find(line.options, &(&1.variant_id == line.chosen_variant_id))
 
-  @doc "The open proposal for `get_store_state`, or nil."
-  def pending(nil), do: nil
+  @doc "The open proposal for `get_store_state`, or nil. Needs the current cart for the projected total."
+  def pending(nil, _cart), do: nil
 
-  def pending(proposal) do
+  def pending(proposal, cart) do
     t = totals(proposal)
+    projected = projected_cart_total(proposal, t.total, cart.subtotal)
 
     %{
       proposal_id: proposal.id,
@@ -311,7 +312,8 @@ defmodule FitzyoWeb.StoreLive.Proposals do
       line_count: length(proposal.lines),
       selected_count: t.selected_count,
       selected_total: Presenter.number(t.total),
-      budget: budget_result(proposal.budget, t.total),
+      projected_cart_total: Presenter.number(projected),
+      budget: budget_result(proposal.budget, t.total, projected),
       unavailable: proposal.unavailable,
       asked_at_ms: DateTime.to_unix(proposal.asked_at, :millisecond),
       timeout_ms: proposal.timeout_ms
@@ -546,11 +548,31 @@ defmodule FitzyoWeb.StoreLive.Proposals do
   defp timeout_ms(_),
     do: {:error, "timeout_ms must be between #{@min_timeout} and #{@max_timeout}"}
 
-  defp budget_result(budget, _total) when map_size(budget) == 0, do: nil
-  defp budget_result(%{total: nil}, _total), do: nil
+  # Two readings of the budget, named so an agent can tell them apart:
+  # `selection_over_by` compares the proposed/applied lines alone to the
+  # budget; `cart_over_by` compares the whole cart (projected during review,
+  # actual at accept) to the same budget.
+  defp budget_result(budget, _selection, _cart) when map_size(budget) == 0, do: nil
+  defp budget_result(%{total: nil}, _selection, _cart), do: nil
 
-  defp budget_result(%{total: limit}, total),
-    do: %{total: Presenter.number(limit), over_by: Presenter.number(over_by(limit, total))}
+  defp budget_result(%{total: limit}, selection_total, cart_total) do
+    %{
+      total: Presenter.number(limit),
+      selection_over_by: Presenter.number(over_by(limit, selection_total)),
+      cart_over_by: Presenter.number(over_by(limit, cart_total))
+    }
+  end
+
+  @doc "What the cart would total if the current selection were accepted."
+  def projected_cart_total(%{mode: "replace"}, selection_total, _cart_subtotal),
+    do: selection_total
+
+  def projected_cart_total(_proposal, selection_total, cart_subtotal),
+    do: Decimal.add(cart_subtotal, selection_total)
+
+  defp applied_total(applied) do
+    Enum.reduce(applied, Decimal.new(0), &Decimal.add(&2, Decimal.from_float(&1.line_total)))
+  end
 
   defp over_by(nil, _total), do: Decimal.new(0)
 

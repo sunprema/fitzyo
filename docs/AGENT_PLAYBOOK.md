@@ -173,11 +173,15 @@ assuming your proposal went through:
  "substituted": [{"proposed": "prod_1012_navy_36", "chosen": "prod_1008_navy_xl"}],
  "unavailable": [{"variant_id": "prod_1024_coral_m", "reason": "out_of_stock"}],
  "cart": {"item_count": 12, "subtotal": 595, "currency": "USD"},
- "budget": {"total": 600, "over_by": 0}}
+ "budget": {"total": 600, "selection_over_by": 0, "cart_over_by": 0}}
 {"accepted": false, "reason": "rejected" | "timeout" | "superseded", "cart": {...}}
 ```
 
-`mode: "replace"` clears the cart on accept only. Lines added this way are
+`budget` carries two readings with distinct names: `selection_over_by` is the
+proposed (or, at accept, applied) lines alone against the budget;
+`cart_over_by` is the whole cart against it — projected during review
+(`pending_proposal.projected_cart_total`), actual at accept. The panel shows
+both. `mode: "replace"` clears the cart on accept only. Lines added this way are
 marked `source: "proposal"` in the cart, so the order record shows what the
 human chose by hand, what an agent added, and what an agent proposed and the
 human accepted. One pending decision at a time: a proposal supersedes an open

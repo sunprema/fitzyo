@@ -485,6 +485,7 @@ defmodule FitzyoWeb.StoreLive do
             plan={@plan}
             question={@question}
             proposal={@proposal}
+            cart={@cart}
           />
         </div>
 
@@ -1399,10 +1400,26 @@ defmodule FitzyoWeb.StoreLive do
   # ---------------------------------------------------------------- agent proposal
 
   attr :proposal, :map, required: true
+  attr :cart, :map, required: true
 
   defp agent_proposal(assigns) do
     totals = Proposals.totals(assigns.proposal)
-    assigns = assign(assigns, totals: totals, groups: Proposals.groups(assigns.proposal))
+
+    projected =
+      Proposals.projected_cart_total(assigns.proposal, totals.total, assigns.cart.subtotal)
+
+    assigns =
+      assign(assigns,
+        totals: totals,
+        groups: Proposals.groups(assigns.proposal),
+        projected: projected,
+        cart_over_by:
+          if(assigns.proposal.budget[:total],
+            do:
+              Decimal.max(Decimal.sub(projected, assigns.proposal.budget.total), Decimal.new(0)),
+            else: Decimal.new(0)
+          )
+      )
 
     ~H"""
     <section
@@ -1443,6 +1460,18 @@ defmodule FitzyoWeb.StoreLive do
           {format_price(@totals.total)} selected
         <% end %>
       </div>
+      <p
+        :if={@proposal.mode == "add" and @cart.items != []}
+        id="proposal-projected"
+        class={[
+          "mt-1 text-[11px]",
+          if(Decimal.positive?(@cart_over_by), do: "text-error", else: "text-muted")
+        ]}
+        data-projected={Decimal.to_string(@projected, :normal)}
+      >
+        Cart after accepting: {format_price(@projected)}{if Decimal.positive?(@cart_over_by),
+          do: " · #{format_price(@cart_over_by)} over budget"}
+      </p>
 
       <div :for={{label, lines} <- @groups} class="mt-3" data-label={label}>
         <div class="mb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-secondary">
@@ -1745,6 +1774,7 @@ defmodule FitzyoWeb.StoreLive do
   attr :plan, :map, default: nil
   attr :question, :map, default: nil
   attr :proposal, :map, default: nil
+  attr :cart, :map, required: true
 
   defp agent_panel(assigns) do
     ~H"""
@@ -1774,7 +1804,7 @@ defmodule FitzyoWeb.StoreLive do
           </button>
         </div>
         <.agent_question :if={@question} question={@question} />
-        <.agent_proposal :if={@proposal} proposal={@proposal} />
+        <.agent_proposal :if={@proposal} proposal={@proposal} cart={@cart} />
         <section
           :if={@plan}
           id="agent-plan"

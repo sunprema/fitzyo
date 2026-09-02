@@ -1015,7 +1015,14 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
 
       state = ok!(view, "get_store_state").state
       assert state.pending_proposal.line_count == 3
-      assert state.pending_proposal.budget == %{total: 150.0, over_by: 19.0}
+      # selection alone vs budget, and the whole cart (empty so far + selection) vs budget
+      assert state.pending_proposal.budget == %{
+               total: 150.0,
+               selection_over_by: 19.0,
+               cart_over_by: 19.0
+             }
+
+      assert state.pending_proposal.projected_cart_total == 169.0
 
       # the shopper edits: drops one shirt, ticks the optional tee, unticks the short
       view |> element("#proposal-line-0 [aria-label='Decrease quantity']") |> render_click()
@@ -1029,6 +1036,15 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
         "product_id" => ctx.short.id,
         "variant_id" => "#{ctx.short.id}_black_34"
       })
+
+      # the projected cart reading now differs from the selection reading
+      assert has_element?(view, "#proposal-projected[data-projected='173']", "$23.00 over budget")
+
+      assert ok!(view, "get_store_state").state.pending_proposal.budget == %{
+               total: 150.0,
+               selection_over_by: 0.0,
+               cart_over_by: 23.0
+             }
 
       view |> element("#proposal-accept") |> render_click()
       result = resolved(view, id)
@@ -1045,7 +1061,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
       assert result.substituted == []
       assert Enum.map(result.unavailable, & &1.reason) == ["out_of_stock", "not_found"]
       assert result.cart.item_count == 3
-      assert result.budget == %{total: 150.0, over_by: 23.0}
+      assert result.budget == %{total: 150.0, selection_over_by: 0.0, cart_over_by: 23.0}
 
       cart = ok!(view, "get_cart").cart
 
