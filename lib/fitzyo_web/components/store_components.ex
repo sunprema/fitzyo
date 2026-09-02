@@ -132,10 +132,12 @@ defmodule FitzyoWeb.StoreComponents do
   attr :id, :string, required: true
   attr :product, :map, required: true
   attr :href, :string, required: true
+  attr :annotations, :list, default: [], doc: "agent annotations for this product (see State)"
 
   def product_card(assigns) do
     colors = color_options(assigns.product)
-    assigns = assign(assigns, colors: colors, hero: List.first(colors))
+    labels = assigns.annotations |> Enum.map(& &1.label) |> Enum.uniq()
+    assigns = assign(assigns, colors: colors, hero: List.first(colors), labels: labels)
 
     ~H"""
     <article
@@ -147,6 +149,7 @@ defmodule FitzyoWeb.StoreComponents do
       data-category={@product.category_id}
       data-price={Decimal.to_string(@product.price, :normal)}
       data-available={to_string(@product.available)}
+      data-fits={if @labels != [], do: Enum.join(@labels, ",")}
     >
       <.link patch={@href} class="block" aria-label={"View #{@product.name}"}>
         <.product_art
@@ -160,6 +163,13 @@ defmodule FitzyoWeb.StoreComponents do
             class="absolute left-2 top-2 rounded-full bg-base-100/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted"
           >
             Sold out
+          </span>
+          <span
+            :if={@labels != []}
+            class="fz-fade absolute left-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-accent-content shadow-sm"
+            title="Matched by your agent"
+          >
+            ✦ Fits {Enum.join(@labels, " · ")}
           </span>
         </.product_art>
       </.link>

@@ -151,3 +151,12 @@
   animation: fz-focus-ring 2.2s ease-out;
   border-radius: 1rem;
 }
+
+/* Selected-item cards pop in one by one as the agent adds them. */
+@keyframes fz-pop {
+  0% { opacity: 0; transform: translateY(6px) scale(0.96); }
+  60% { opacity: 1; transform: translateY(0) scale(1.02); }
+  100% { transform: scale(1); }
+}
+
+.fz-pop { animation: fz-pop 0.45s cubic-bezier(0.2, 0.8, 0.2, 1); }

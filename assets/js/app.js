@@ -29,8 +29,28 @@ import topbar from "../vendor/topbar"
 // FitzYo wraps the ash_web_mcp transport hook so the LiveView can show
 // whether an agent is actually attached (native modelContext) or whether the
 // page is waiting on the postMessage bridge.
+// Tools that legitimately wait on a person get a longer client timeout than
+// the transport's default 15s; ask_human may block up to its own timeout_ms.
+const LONG_CALL_TIMEOUT_MS = {ask_human: 610000}
+
 const WebMcp = {
   ...WebMcpCore,
+  dispatchCall(toolName, input, signal) {
+    const timeoutMs = LONG_CALL_TIMEOUT_MS[toolName]
+    if (!timeoutMs) return WebMcpCore.dispatchCall.call(this, toolName, input, signal)
+    if (this.localTools[toolName]) return this.localTools[toolName](input)
+    return new Promise((resolve, reject) => {
+      const id = ++this.callSeq
+      this.pending.set(id, {resolve, reject})
+      this.pushEvent("webmcp:call", {id, tool: toolName, input})
+      const timer = setTimeout(() => {
+        if (this.pending.has(id)) { this.pending.delete(id); reject(new Error("WebMCP call timed out")) }
+      }, timeoutMs)
+      if (signal) signal.addEventListener("abort", () => {
+        if (this.pending.has(id)) { this.pending.delete(id); clearTimeout(timer); reject(new DOMException("WebMCP call aborted", "AbortError")) }
+      })
+    })
+  },
   mounted() {
     WebMcpCore.mounted.call(this)
     let reported = null
@@ -51,12 +71,65 @@ const WebMcp = {
 
 // Scrolls a semantic element into view and flashes a highlight when an agent
 // calls focus_product / focus_filter (or when the cart badge changes).
+// Keeps the agent feed pinned to its newest entry, like a terminal.
+const FzAutoScroll = {
+  mounted() { this.scroll() },
+  updated() { this.scroll() },
+  scroll() { this.el.scrollTop = this.el.scrollHeight },
+}
+
+// Press-and-hold approval for checkout. Only trusted pointer/keyboard input
+// (event.isTrusted) held for the full duration sends `confirm_checkout`, and
+// it carries the nonce the server issued when the review opened. A synthetic
+// `.click()` never reaches the server. (Trusted input from a browser
+// automation protocol still counts as a person at the keyboard; this is a
+// gesture, not cryptography.)
+const FzHoldToConfirm = {
+  mounted() {
+    this.holdMs = parseInt(this.el.dataset.holdMs || "700", 10)
+    this.nonce = null
+    this.fill = this.el.querySelector("[data-hold-fill]")
+    this.handleEvent("fz:checkout_nonce", ({nonce}) => { this.nonce = nonce })
+
+    const start = (e) => {
+      if (!e.isTrusted || this.timer) return
+      if (e.type === "keydown" && e.key !== "Enter" && e.key !== " ") return
+      if (e.type === "keydown" && e.repeat) return
+      e.preventDefault()
+      this.startedAt = performance.now()
+      this.el.classList.add("fz-holding")
+      this.tick = setInterval(() => {
+        const pct = Math.min(100, ((performance.now() - this.startedAt) / this.holdMs) * 100)
+        if (this.fill) this.fill.style.width = `${pct}%`
+      }, 40)
+      this.timer = setTimeout(() => {
+        const held = Math.round(performance.now() - this.startedAt)
+        cancel()
+        this.pushEvent("confirm_checkout", {nonce: this.nonce, held_ms: held, trusted: e.isTrusted})
+      }, this.holdMs)
+    }
+    const cancel = () => {
+      clearTimeout(this.timer); clearInterval(this.tick)
+      this.timer = null; this.tick = null
+      this.el.classList.remove("fz-holding")
+      if (this.fill) this.fill.style.width = "0%"
+    }
+    this.el.addEventListener("pointerdown", start)
+    this.el.addEventListener("keydown", start)
+    for (const ev of ["pointerup", "pointerleave", "pointercancel", "keyup", "blur"]) this.el.addEventListener(ev, cancel)
+    // A plain click (synthetic or real) must not place the order.
+    this.el.addEventListener("click", (e) => e.preventDefault())
+  },
+}
+
 const FzFocus = {
   mounted() {
     this.handleEvent("fz:focus", ({id}) => {
       const el = document.getElementById(id)
       if (!el) return
       el.scrollIntoView({behavior: "smooth", block: "center", inline: "nearest"})
+      const target = el.querySelector("[autofocus]")
+      if (target) setTimeout(() => target.focus({preventScroll: true}), 150)
       el.classList.remove("fz-focus-ring")
       void el.offsetWidth
       el.classList.add("fz-focus-ring")
@@ -69,7 +142,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, WebMcp, FzFocus},
+  hooks: {...colocatedHooks, WebMcp, FzFocus, FzAutoScroll, FzHoldToConfirm},
 })
 
 // Show progress bar on live navigation and form submits

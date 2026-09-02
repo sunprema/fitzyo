@@ -200,6 +200,33 @@ defmodule Fitzyo.CatalogTest do
       assert ids(Catalog.filter_products!(%{category: ctx.shirts.id, gender: "women"})) == []
     end
 
+    test "unisex products match any shopper group of their age group", ctx do
+      hat = product_fixture(%{category_id: ctx.shirts.id, gender: :unisex, age_group: :adult})
+
+      kids_hat =
+        product_fixture(%{category_id: ctx.shirts.id, gender: :unisex, age_group: :youth})
+
+      variants_fixture(hat, ["sand"], ["S/M"])
+      variants_fixture(kids_hat, ["blue"], ["S/M"])
+
+      men = ids(Catalog.filter_products!(%{category: ctx.shirts.id, gender: "men"}))
+      assert hat.id in men
+      assert ctx.columbia.id in men
+      refute kids_hat.id in men
+
+      boys = ids(Catalog.filter_products!(%{category: ctx.shirts.id, gender: "boys"}))
+      assert boys == [kids_hat.id]
+
+      assert [%{product_id: id}] =
+               Catalog.find_matching_variants!(%{
+                 category: ctx.shirts.id,
+                 gender: "girls",
+                 size: "S/M"
+               })
+
+      assert id == kids_hat.id
+    end
+
     test "a filter that names a size nobody stocks returns nothing", ctx do
       assert ids(Catalog.filter_products!(%{category: ctx.shirts.id, sizes: ["XXXL"]})) == []
     end

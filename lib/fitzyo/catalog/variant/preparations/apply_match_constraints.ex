@@ -63,7 +63,16 @@ defmodule Fitzyo.Catalog.Variant.Preparations.ApplyMatchConstraints do
     do: Ash.Query.filter(query, intersects(product.activities, ^activities))
 
   defp filter_gender(query, nil), do: query
-  defp filter_gender(query, gender), do: Ash.Query.filter(query, product.gender == ^gender)
+
+  defp filter_gender(query, gender) do
+    age_group = Fitzyo.Catalog.Types.Gender.age_group(gender)
+
+    Ash.Query.filter(
+      query,
+      product.gender == ^gender or
+        (product.gender == :unisex and product.age_group == ^age_group)
+    )
+  end
 
   defp filter_price_max(query, nil), do: query
   defp filter_price_max(query, max), do: Ash.Query.filter(query, price <= ^max)

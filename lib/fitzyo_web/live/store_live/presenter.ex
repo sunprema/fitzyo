@@ -130,6 +130,46 @@ defmodule FitzyoWeb.StoreLive.Presenter do
     %{item_count: cart.item_count, subtotal: number(cart.subtotal), currency: "USD"}
   end
 
+  @doc "An agent annotation as the agent sees it back in `get_store_state`."
+  def annotation(a) do
+    %{
+      label: a.label,
+      product_id: a.product_id,
+      variant_id: a.variant_id,
+      source: to_string(a.source),
+      match: a.match,
+      match_score: a.score,
+      reason: a.reason
+    }
+  end
+
+  @doc "The human's current view, for agents to observe overrides (§14, §31)."
+  def state(assigns, variant) do
+    %{
+      view: if(assigns.product, do: "product", else: "results"),
+      search_query: assigns.filters.query,
+      filters: FitzyoWeb.StoreLive.Filters.to_params(assigns.filters),
+      results_count: assigns.results_count,
+      selected_product_id: assigns.product && assigns.product.id,
+      selected_color: assigns.selected_color,
+      selected_size: assigns.selected_size,
+      selected_variant_id: variant && variant.id,
+      comparison_product_ids: Enum.map(assigns.comparison, & &1.id),
+      annotations:
+        assigns.annotations |> Map.values() |> List.flatten() |> Enum.map(&annotation/1),
+      plan: assigns.plan,
+      pending_question: FitzyoWeb.StoreLive.Questions.pending(assigns.question),
+      cart: cart_totals(assigns.cart),
+      cart_open: assigns.cart_open,
+      agent: %{
+        status: to_string(assigns.agent.status),
+        message: assigns.agent.message,
+        progress: assigns.agent.progress,
+        set_with: "agent_update"
+      }
+    }
+  end
+
   def price(%Decimal{} = amount, currency), do: %{amount: number(amount), currency: currency}
 
   def number(%Decimal{} = value), do: value |> Decimal.round(2) |> Decimal.to_float()

@@ -15,6 +15,10 @@ defmodule FitzyoWeb.StoreLive do
 
   use FitzyoWeb, :live_view
 
+  # Must be attached before AshWebMcp's own hook: `ask_human` calls are held
+  # open here instead of being answered synchronously by the library.
+  on_mount {__MODULE__, :intercept_questions}
+
   use AshWebMcp.LiveView,
     resources: [],
     view_tools: FitzyoWeb.StoreLive.AgentTools,
@@ -22,7 +26,11 @@ defmodule FitzyoWeb.StoreLive do
 
   alias Fitzyo.Commerce
   alias FitzyoWeb.Plugs.CartSession
-  alias FitzyoWeb.StoreLive.{AgentTools, Filters, State}
+  alias FitzyoWeb.StoreLive.{AgentTools, Filters, Questions, State}
+
+  def on_mount(:intercept_questions, _params, _session, socket) do
+    {:cont, attach_hook(socket, :fz_ask_human, :handle_event, &Questions.intercept/3)}
+  end
 
   # ---------------------------------------------------------------- lifecycle
 
@@ -39,7 +47,10 @@ defmodule FitzyoWeb.StoreLive do
        agent_panel_open: true,
        agent_transport: nil,
        tool_count: length(AgentTools.tools()),
-       order_confirmation: nil
+       order_confirmation: nil,
+       checkout_review: false,
+       checkout_nonce: nil,
+       question: nil
      )}
   end
 
@@ -136,6 +147,20 @@ defmodule FitzyoWeb.StoreLive do
     {:noreply, State.clear_comparison(socket)}
   end
 
+  # ---------------------------------------------------------------- events: agent annotations (human override)
+
+  def handle_event("clear_label", %{"label" => label}, socket) do
+    {:noreply, State.clear_label(socket, label)}
+  end
+
+  def handle_event("remove_annotation", %{"product_id" => id, "label" => label}, socket) do
+    {:noreply, State.remove_annotation(socket, id, label)}
+  end
+
+  def handle_event("dismiss_plan", _params, socket) do
+    {:noreply, State.clear_plan(socket)}
+  end
+
   # ---------------------------------------------------------------- events: cart
 
   def handle_event("toggle_cart", _params, socket) do
@@ -169,13 +194,65 @@ defmodule FitzyoWeb.StoreLive do
     end
   end
 
+  def handle_event("clear_cart", _params, socket) do
+    case Commerce.clear_cart(socket.assigns.cart_id) do
+      :ok -> {:noreply, State.load_cart(socket)}
+      {:error, error} -> {:noreply, put_flash(socket, :error, Fitzyo.Errors.message(error))}
+    end
+  end
+
+  # Checkout is the one action no agent may take. It is three things at once:
+  #   1. a review step (the order summary modal),
+  #   2. an approval gesture: press-and-hold on the confirm button, sent by a
+  #      JS hook only for trusted pointer/keyboard input together with a
+  #      single-use nonce issued when the review opened,
+  #   3. an audit entry in the activity feed naming the human as approver.
+  # A synthetic `.click()` has no gesture, no trusted event, and no nonce.
+  def handle_event("checkout", _params, %{assigns: %{cart: %{items: []}}} = socket) do
+    {:noreply, socket}
+  end
+
   def handle_event("checkout", _params, socket) do
-    case Commerce.checkout_cart(socket.assigns.cart_id) do
-      {:ok, confirmation} ->
+    nonce = Base.url_encode64(:crypto.strong_rand_bytes(18), padding: false)
+
+    {:noreply,
+     socket
+     |> assign(checkout_review: true, checkout_nonce: nonce)
+     |> push_event("fz:checkout_nonce", %{nonce: nonce})
+     |> State.log_human(
+       "Opened order review (#{items_label(socket.assigns.cart.item_count)}, #{format_price(socket.assigns.cart.subtotal)})"
+     )}
+  end
+
+  def handle_event("cancel_checkout", _params, socket) do
+    {:noreply,
+     socket
+     |> assign(checkout_review: false, checkout_nonce: nil)
+     |> State.log_human("Went back to the cart without ordering")}
+  end
+
+  def handle_event("confirm_checkout", params, socket) do
+    with :ok <- verify_approval(params, socket),
+         {:ok, confirmation} <- Commerce.checkout_cart(socket.assigns.cart_id) do
+      {:noreply,
+       socket
+       |> assign(
+         order_confirmation:
+           Map.put(confirmation, :approved_by, "a human press-and-hold on this device"),
+         cart_open: false,
+         checkout_review: false,
+         checkout_nonce: nil
+       )
+       |> State.log_human(
+         "Approved and placed order #{confirmation.order_number} · #{items_label(confirmation.item_count)} · #{format_price(confirmation.subtotal)}"
+       )
+       |> State.load_cart()}
+    else
+      {:error, :not_approved} ->
         {:noreply,
          socket
-         |> assign(order_confirmation: confirmation, cart_open: false)
-         |> State.load_cart()}
+         |> put_flash(:error, "Checkout needs a press-and-hold from you; nothing was ordered.")
+         |> State.log_human("Checkout blocked: no human approval signal", :error)}
 
       {:error, error} ->
         {:noreply, put_flash(socket, :error, Fitzyo.Errors.message(error))}
@@ -204,7 +281,34 @@ defmodule FitzyoWeb.StoreLive do
 
   # ---------------------------------------------------------------- info
 
+  def handle_event("dismiss_agent_status", _params, socket) do
+    {:noreply, State.dismiss_agent_status(socket)}
+  end
+
+  # ---------------------------------------------------------------- events: agent questions
+
+  def handle_event("answer_question", %{"option_id" => id}, socket) do
+    {:noreply, Questions.answer(socket, [id], nil)}
+  end
+
+  def handle_event("answer_question", params, socket) do
+    selected = List.wrap(params["selected"]) |> Enum.filter(&is_binary/1)
+    {:noreply, Questions.answer(socket, selected, params["free_text"])}
+  end
+
+  def handle_event("dismiss_question", _params, socket) do
+    {:noreply, Questions.dismiss(socket)}
+  end
+
   @impl true
+  def handle_info({:fz_question_timeout, question_id}, socket) do
+    {:noreply, Questions.timeout(socket, question_id)}
+  end
+
+  def handle_info({:fz_agent_idle, tick}, socket) do
+    {:noreply, State.agent_idle(socket, tick)}
+  end
+
   def handle_info({:fz_activity, call, result, status}, socket) do
     {:noreply, State.log_activity(socket, call, result, status)}
   end
@@ -215,12 +319,44 @@ defmodule FitzyoWeb.StoreLive do
 
   # ---------------------------------------------------------------- helpers
 
+  @hold_ms 600
+
+  defp items_label(1), do: "1 item"
+  defp items_label(count), do: "#{count} items"
+
+  defp verify_approval(params, socket) do
+    nonce = socket.assigns.checkout_nonce
+    held = params["held_ms"]
+
+    if is_binary(nonce) and params["nonce"] == nonce and params["trusted"] == true and
+         is_integer(held) and held >= @hold_ms do
+      :ok
+    else
+      {:error, :not_approved}
+    end
+  end
+
   defp patch_filters(socket, filters), do: {:noreply, State.patch_filters(socket, filters)}
 
   defp decrement_or_remove(%{quantity: 1} = item), do: {:ok, Commerce.remove_from_cart!(item)}
 
   defp decrement_or_remove(item),
     do: Commerce.set_cart_item_quantity(item, item.quantity - 1)
+
+  # Cart lines grouped by the label the shopper's agent attached, labelled
+  # groups first, in first-seen order.
+  defp cart_groups(items) do
+    items
+    |> Enum.group_by(& &1.label)
+    |> Enum.sort_by(fn {label, items} -> {is_nil(label), hd(items).inserted_at} end)
+  end
+
+  defp variant_labels(annotations, variant_id) do
+    annotations
+    |> Enum.filter(&(&1.variant_id == variant_id))
+    |> Enum.map(& &1.label)
+    |> Enum.uniq()
+  end
 
   defp chip_label(facets, %{facet: "category", value: id}), do: State.category_name(facets, id)
   defp chip_label(_facets, chip), do: chip.label
@@ -267,9 +403,16 @@ defmodule FitzyoWeb.StoreLive do
       <div id="store" class="flex min-h-screen flex-col" phx-hook="FzFocus">
         <div id="webmcp" phx-hook="WebMcp" phx-update="ignore" hidden></div>
         <.store_header cart={@cart} filters={@filters} agent_connected={@agent_connected} />
+        <.agent_banner agent={@agent} thought={State.latest_thought(@activity)} question={@question} />
+        <.selections :if={@cart.items != []} cart={@cart} filters={@filters} />
 
         <div class="flex flex-1 min-h-0">
-          <.filter_rail filters={@filters} facets={@facets} sizes={@sizes} />
+          <.filter_rail
+            filters={@filters}
+            facets={@facets}
+            sizes={@sizes}
+            labels={State.labels(@annotations)}
+          />
 
           <main class="fz-scroll min-w-0 flex-1 overflow-y-auto px-4 py-5 md:px-6">
             <%= if @product do %>
@@ -281,6 +424,7 @@ defmodule FitzyoWeb.StoreLive do
                 variant={@variant}
                 size_guide_open={@size_guide_open}
                 comparing={Enum.any?(@comparison, &(&1.id == @product.id))}
+                annotations={State.annotations_for(@annotations, @product.id)}
               />
             <% else %>
               <.comparison :if={@comparison != []} products={@comparison} filters={@filters} />
@@ -290,6 +434,7 @@ defmodule FitzyoWeb.StoreLive do
                 chips={@chips}
                 results_count={@results_count}
                 streams={@streams}
+                annotations={@annotations}
               />
             <% end %>
           </main>
@@ -300,10 +445,13 @@ defmodule FitzyoWeb.StoreLive do
             transport={@agent_transport}
             tool_count={@tool_count}
             activity={@activity}
+            plan={@plan}
+            question={@question}
           />
         </div>
 
         <.cart_drawer :if={@cart_open} cart={@cart} />
+        <.checkout_review :if={@checkout_review} cart={@cart} />
         <.order_confirmation :if={@order_confirmation} confirmation={@order_confirmation} />
       </div>
     </Layouts.app>
@@ -391,11 +539,158 @@ defmodule FitzyoWeb.StoreLive do
     """
   end
 
+  # ---------------------------------------------------------------- agent banner
+
+  attr :agent, :map, required: true
+  attr :thought, :string, default: nil
+  attr :question, :map, default: nil
+
+  # A blocked agent must never look idle: an open question overrides the
+  # agent's own status with a "waiting for you" state.
+  defp agent_banner(assigns) do
+    status = if assigns.question, do: :waiting, else: assigns.agent.status
+    assigns = assign(assigns, status: status)
+
+    ~H"""
+    <div
+      :if={@status != :idle}
+      id="agent-banner"
+      role="status"
+      aria-live="polite"
+      data-status={@status}
+      class={[
+        "fz-fade sticky top-[68px] z-10 flex items-center gap-3 border-b px-4 py-2 text-[13px] md:px-8",
+        case @status do
+          :working -> "border-mint-dark bg-mint text-secondary dark:bg-base-300"
+          :waiting -> "border-peach-dark bg-peach text-[#4a3b33]"
+          _ -> "border-primary/40 bg-primary text-primary-content"
+        end
+      ]}
+    >
+      <%= case @status do %>
+        <% :working -> %>
+          <.status_dot class="size-2.5" />
+          <span class="shrink-0 font-bold">Agent is working</span>
+        <% :waiting -> %>
+          <span class="fz-pulse inline-block size-2.5 rounded-full bg-accent" />
+          <span class="shrink-0 font-bold text-error">Waiting for you</span>
+          <a href="#agent-question" class="truncate font-semibold underline-offset-2 hover:underline">
+            {@question.question}
+          </a>
+        <% _ -> %>
+          <span class="shrink-0 font-bold">✓ Agent finished</span>
+      <% end %>
+      <span
+        :if={@agent.message && @status != :waiting}
+        id="agent-banner-message"
+        class="truncate font-semibold"
+      >
+        {@agent.message}
+      </span>
+      <span
+        :if={@agent.status == :working && is_binary(@thought) && is_nil(@agent.message)}
+        class="truncate italic opacity-80"
+      >
+        {@thought}
+      </span>
+      <span class="flex-1" />
+      <div :if={@agent.progress} id="agent-progress" class="flex shrink-0 items-center gap-2">
+        <span class="text-xs font-semibold tabular-nums">
+          {@agent.progress.done} / {@agent.progress.total}
+        </span>
+        <div class="h-1.5 w-28 overflow-hidden rounded-full bg-base-100/60">
+          <div
+            class="h-full rounded-full bg-primary transition-[width] duration-500"
+            style={"width: #{round(@agent.progress.done / @agent.progress.total * 100)}%"}
+          />
+        </div>
+      </div>
+      <button
+        :if={@agent.status == :done}
+        type="button"
+        phx-click="dismiss_agent_status"
+        aria-label="Dismiss"
+        class="shrink-0 text-lg leading-none cursor-pointer"
+      >
+        ×
+      </button>
+    </div>
+    """
+  end
+
+  # ---------------------------------------------------------------- selections tray
+
+  attr :cart, :map, required: true
+  attr :filters, Filters, required: true
+
+  defp selections(assigns) do
+    ~H"""
+    <section
+      id="selections"
+      class="fz-fade border-b border-base-300 bg-base-100 px-4 py-2.5 md:px-8"
+      aria-label="Selected items"
+    >
+      <div class="mb-1.5 flex items-center justify-between">
+        <span class="text-[11px] font-bold uppercase tracking-wider text-muted">
+          ✦ Selected so far · {@cart.item_count} {if @cart.item_count == 1, do: "item", else: "items"} · {format_price(
+            @cart.subtotal
+          )}
+        </span>
+        <button
+          type="button"
+          phx-click="toggle_cart"
+          class="text-xs font-semibold text-primary cursor-pointer hover:underline"
+        >
+          Review cart
+        </button>
+      </div>
+      <div class="fz-scroll flex gap-2.5 overflow-x-auto pb-1">
+        <article
+          :for={item <- @cart.items}
+          id={"selection-#{item.id}"}
+          class="fz-pop flex w-[220px] shrink-0 items-center gap-2.5 rounded-xl border border-base-300 bg-base-200 p-2"
+          data-label={item.label}
+          data-variant-id={item.variant_id}
+        >
+          <.link patch={product_path(item.variant.product_id, @filters)} class="shrink-0">
+            <.product_art
+              name={item.variant.product.name}
+              hex={item.variant.color_hex}
+              class="size-12 rounded-lg [&>span:first-child]:text-sm"
+            />
+          </.link>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-1.5">
+              <span
+                :if={item.label}
+                class="rounded-full bg-accent px-1.5 py-px text-[9px] font-bold text-accent-content"
+              >
+                {item.label}
+              </span>
+              <span class="truncate text-[10px] font-bold uppercase tracking-wide text-primary">
+                {item.variant.product.brand}
+              </span>
+            </div>
+            <div class="truncate text-xs font-semibold">{item.variant.product.name}</div>
+            <div class="text-[11px] text-muted">
+              {humanize(item.variant.color)} / {item.variant.size} · {format_price(item.line_total)}{if item.quantity >
+                                                                                                          1,
+                                                                                                        do:
+                                                                                                          " (×#{item.quantity})"}
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+    """
+  end
+
   # ---------------------------------------------------------------- filter rail
 
   attr :filters, Filters, required: true
   attr :facets, :map, required: true
   attr :sizes, :list, required: true
+  attr :labels, :list, default: []
 
   defp filter_rail(assigns) do
     ~H"""
@@ -404,6 +699,42 @@ defmodule FitzyoWeb.StoreLive do
       class="fz-scroll hidden w-[224px] shrink-0 overflow-y-auto border-r border-base-300 bg-base-100 p-4 md:block"
       aria-label="Filters"
     >
+      <section
+        :if={@labels != []}
+        id="fit-labels"
+        class="fz-fade mb-5 rounded-[14px] border border-peach-dark bg-peach p-3.5"
+      >
+        <div class="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-error">
+          ✦ Matched by your agent
+        </div>
+        <p class="mb-2.5 text-[11px] leading-snug text-muted">
+          Sizes and preferences came from your agent, not this store.
+        </p>
+        <ul class="flex flex-col gap-1.5">
+          <li
+            :for={entry <- @labels}
+            id={"fit-label-#{dom_slug(entry.label)}"}
+            class="flex items-center justify-between text-[13px]"
+          >
+            <span>
+              <strong>Fits {entry.label}</strong>
+              <span class="text-muted">· {entry.product_count} {if entry.product_count == 1,
+                do: "product",
+                else: "products"}</span>
+            </span>
+            <button
+              type="button"
+              phx-click="clear_label"
+              phx-value-label={entry.label}
+              aria-label={"Clear matches for #{entry.label}"}
+              class="text-xs text-faint cursor-pointer hover:text-error"
+            >
+              ×
+            </button>
+          </li>
+        </ul>
+      </section>
+
       <.facet title="Category">
         <div id="filter-categories" class="flex flex-col gap-0.5">
           <button
@@ -569,6 +900,7 @@ defmodule FitzyoWeb.StoreLive do
   attr :chips, :list, required: true
   attr :results_count, :integer, required: true
   attr :streams, :map, required: true
+  attr :annotations, :map, default: %{}
 
   defp results(assigns) do
     ~H"""
@@ -632,6 +964,7 @@ defmodule FitzyoWeb.StoreLive do
           id={dom_id}
           product={product}
           href={product_path(product.id, @filters)}
+          annotations={State.annotations_for(@annotations, product.id)}
         />
       </div>
     </div>
@@ -647,6 +980,7 @@ defmodule FitzyoWeb.StoreLive do
   attr :variant, :map, default: nil
   attr :size_guide_open, :boolean, default: false
   attr :comparing, :boolean, default: false
+  attr :annotations, :list, default: []
 
   defp product_detail(assigns) do
     colors = FitzyoWeb.StoreComponents.color_options(assigns.product)
@@ -696,6 +1030,44 @@ defmodule FitzyoWeb.StoreLive do
           </h1>
           <div class="mb-3.5 text-[22px] font-bold">{format_price(@product.price)}</div>
           <p class="mb-5 text-sm leading-relaxed text-muted">{@product.description}</p>
+
+          <div
+            :for={annotation <- @annotations}
+            id={"fit-match-#{@product.id}-#{dom_slug(annotation.label)}-#{annotation.source}"}
+            class="fz-fade mb-4 rounded-[14px] border border-peach-dark bg-peach p-3.5"
+            data-label={annotation.label}
+            data-variant-id={annotation.variant_id}
+          >
+            <div class="mb-1.5 flex items-center justify-between">
+              <span class="text-xs font-bold text-error">
+                ✦ {if annotation.source == :match, do: "FitzYo Match", else: "FitzYo Recommendation"} — {annotation.label}
+              </span>
+              <button
+                type="button"
+                phx-click="remove_annotation"
+                phx-value-product_id={@product.id}
+                phx-value-label={annotation.label}
+                aria-label={"Dismiss for #{annotation.label}"}
+                class="text-xs text-faint cursor-pointer hover:text-error"
+              >
+                ×
+              </button>
+            </div>
+            <ul
+              :if={annotation.match != %{}}
+              class="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-[#4a3b33]"
+            >
+              <li :for={{key, ok?} <- annotation.match}>
+                <span class="capitalize">{key}</span> {if ok?, do: "✓", else: "✗"}
+              </li>
+            </ul>
+            <p :if={annotation.reason} class="text-[13px] leading-snug text-[#4a3b33]">
+              {annotation.reason}
+            </p>
+            <p :if={annotation.variant_id} class="mt-1 text-[11px] text-muted">
+              Variant {annotation.variant_id} · agent-generated
+            </p>
+          </div>
 
           <div class="mb-4">
             <div class="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted">
@@ -764,6 +1136,12 @@ defmodule FitzyoWeb.StoreLive do
                 ]}
               >
                 {variant.size}
+                <span
+                  :for={label <- variant_labels(@annotations, variant.id)}
+                  class="ml-1 rounded-full bg-accent px-1.5 py-px text-[9px] font-bold text-accent-content"
+                >
+                  {label}
+                </span>
               </button>
             </div>
           </div>
@@ -904,7 +1282,9 @@ defmodule FitzyoWeb.StoreLive do
       data-product-ids={Enum.map_join(@products, ",", & &1.id)}
     >
       <div class="mb-3 flex items-center justify-between">
-        <h2 class="font-display text-lg font-semibold">Comparing {length(@products)} products</h2>
+        <h2 class="font-display text-lg font-semibold">
+          Comparing {length(@products)} {if length(@products) == 1, do: "product", else: "products"}
+        </h2>
         <button
           type="button"
           id="compare-clear"
@@ -961,6 +1341,132 @@ defmodule FitzyoWeb.StoreLive do
     """
   end
 
+  # ---------------------------------------------------------------- agent question
+
+  attr :question, :map, required: true
+
+  defp agent_question(assigns) do
+    ~H"""
+    <section
+      id="agent-question"
+      class="fz-fade m-3 rounded-[14px] border-2 border-accent bg-peach p-3.5 text-[#4a3b33]"
+      role="group"
+      aria-labelledby="agent-question-title"
+      data-question-id={@question.id}
+      phx-window-keydown="dismiss_question"
+      phx-key="Escape"
+    >
+      <div class="mb-1 flex items-start justify-between gap-2">
+        <div class="text-[11px] font-bold uppercase tracking-wider text-error">
+          ✦ Your agent is asking
+        </div>
+        <button
+          type="button"
+          id="dismiss-question"
+          phx-click="dismiss_question"
+          class="shrink-0 text-xs font-semibold text-muted cursor-pointer hover:text-error"
+        >
+          Not now
+        </button>
+      </div>
+      <h3 id="agent-question-title" class="font-display text-[15px] font-semibold leading-snug">
+        {@question.question}
+      </h3>
+      <p :if={@question.subtitle} class="mt-0.5 text-xs text-muted">{@question.subtitle}</p>
+
+      <form
+        id="agent-question-form"
+        phx-submit="answer_question"
+        class="mt-3 flex flex-col gap-2"
+      >
+        <%= for {option, index} <- Enum.with_index(@question.options) do %>
+          <%= if @question.allow_multiple do %>
+            <label
+              id={"question-option-#{dom_slug(option.id)}"}
+              data-option-id={option.id}
+              class="flex cursor-pointer items-start gap-2 rounded-xl border border-base-300 bg-base-100 p-2.5 text-[13px] hover:border-primary/60"
+            >
+              <input
+                type="checkbox"
+                name="selected[]"
+                value={option.id}
+                autofocus={index == 0}
+                class="checkbox checkbox-primary checkbox-sm mt-0.5 rounded"
+              />
+              <.question_option option={option} />
+            </label>
+          <% else %>
+            <button
+              type="button"
+              id={"question-option-#{dom_slug(option.id)}"}
+              phx-click="answer_question"
+              phx-value-option_id={option.id}
+              data-option-id={option.id}
+              autofocus={index == 0}
+              class="flex w-full cursor-pointer items-start gap-2 rounded-xl border border-base-300 bg-base-100 p-2.5 text-left text-[13px] transition hover:border-primary hover:bg-mint focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <.question_option option={option} />
+            </button>
+          <% end %>
+        <% end %>
+
+        <input
+          :if={@question.allow_free_text}
+          type="text"
+          name="free_text"
+          id="question-free-text"
+          placeholder={if @question.options == [], do: "Type your answer…", else: "Other…"}
+          autocomplete="off"
+          autofocus={@question.options == []}
+          class="w-full rounded-xl border border-base-300 bg-base-100 px-3 py-2 text-[13px]"
+        />
+
+        <button
+          :if={@question.allow_multiple or @question.allow_free_text}
+          type="submit"
+          id="answer-question"
+          class="mt-1 rounded-xl bg-primary py-2.5 text-[13px] font-bold text-primary-content cursor-pointer hover:brightness-95"
+        >
+          Answer
+        </button>
+      </form>
+      <p class="mt-2.5 text-[10px] text-faint">
+        The agent is paused until you answer. You can keep browsing and editing the cart meanwhile.
+      </p>
+    </section>
+    """
+  end
+
+  attr :option, :map, required: true
+
+  defp question_option(assigns) do
+    ~H"""
+    <%= if @option.product do %>
+      <.product_art
+        name={@option.product.name}
+        hex={@option.product.hex}
+        class="size-11 shrink-0 rounded-lg [&>span:first-child]:text-sm"
+      />
+      <span class="min-w-0 flex-1">
+        <span class="block font-semibold leading-snug">{@option.label}</span>
+        <span class="block truncate text-[11px] text-muted">
+          {@option.product.brand} · {@option.product.name}{if @option.product.detail,
+            do: " · " <> @option.product.detail} · {format_price(@option.product.price)}
+        </span>
+        <span :if={!@option.product.available} class="block text-[11px] font-semibold text-error">
+          Sold out when asked
+        </span>
+        <span :if={@option.description} class="block text-[11px] text-muted">{@option.description}</span>
+      </span>
+    <% else %>
+      <span class="min-w-0 flex-1">
+        <span class="block font-semibold leading-snug">{@option.label}</span>
+        <span :if={@option.description} class="block text-[11px] text-muted">{@option.description}</span>
+      </span>
+    <% end %>
+    """
+  end
+
   # ---------------------------------------------------------------- agent panel
 
   attr :open, :boolean, required: true
@@ -968,6 +1474,8 @@ defmodule FitzyoWeb.StoreLive do
   attr :transport, :atom, default: nil
   attr :tool_count, :integer, required: true
   attr :activity, :list, required: true
+  attr :plan, :map, default: nil
+  attr :question, :map, default: nil
 
   defp agent_panel(assigns) do
     ~H"""
@@ -992,23 +1500,103 @@ defmodule FitzyoWeb.StoreLive do
             <.icon name="hero-chevron-right-micro" class="size-4" />
           </button>
         </div>
+        <.agent_question :if={@question} question={@question} />
+        <section
+          :if={@plan}
+          id="agent-plan"
+          class="fz-fade m-3 rounded-[14px] border border-mint-dark bg-mint p-3.5 dark:bg-base-300"
+          aria-label="Agent shopping plan"
+        >
+          <div class="mb-1 flex items-start justify-between gap-2">
+            <div>
+              <div class="font-display text-[15px] font-semibold leading-tight">{@plan.title}</div>
+              <div :if={@plan.subtitle} class="text-[11px] text-muted">{@plan.subtitle}</div>
+            </div>
+            <button
+              type="button"
+              phx-click="dismiss_plan"
+              aria-label="Dismiss plan"
+              class="text-xs text-faint cursor-pointer hover:text-error"
+            >
+              ×
+            </button>
+          </div>
+          <div :for={group <- @plan.groups} class="mt-2.5">
+            <div class="text-[11px] font-bold uppercase tracking-wider text-secondary">
+              {group.label}
+            </div>
+            <ul class="mt-1 flex flex-col gap-0.5 text-xs">
+              <li :for={item <- group.items} class="flex gap-1.5" data-status={item.status}>
+                <span class={[
+                  "w-3 shrink-0 text-center font-bold",
+                  case item.status do
+                    "added" -> "text-primary"
+                    "have" -> "text-faint"
+                    "need" -> "text-accent"
+                    _ -> "text-faint"
+                  end
+                ]}>
+                  {case item.status do
+                    "added" -> "✓"
+                    "have" -> "✓"
+                    "need" -> "•"
+                    _ -> "–"
+                  end}
+                </span>
+                <span class={[
+                  item.status in ~w(have skipped) && "text-muted",
+                  item.status == "skipped" && "line-through"
+                ]}>
+                  {item.text}
+                </span>
+              </li>
+            </ul>
+          </div>
+          <p class="mt-2.5 text-[10px] text-faint">
+            Plan written by your agent from your private context.
+          </p>
+        </section>
         <ol
           id="agent-activity"
-          class="fz-scroll flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-3.5"
+          phx-hook="FzAutoScroll"
+          class="fz-scroll flex flex-1 flex-col gap-2.5 overflow-y-auto px-4 py-3.5"
         >
           <li :if={@activity == []} class="text-xs leading-relaxed text-muted">
             No agent actions yet. When a WebMCP-connected agent searches, filters, or
             adds to the cart, each call shows up here.
           </li>
-          <li :for={entry <- @activity} class="fz-fade" data-status={entry.status}>
-            <div class={[
-              "break-words font-mono text-[11px] font-bold",
-              if(entry.status == :ok, do: "text-secondary", else: "text-error")
-            ]}>
-              {if entry.status == :ok, do: "✓", else: "✗"} {entry.call}
-            </div>
-            <div class="mt-0.5 text-[11px] text-muted">{entry.result}</div>
-          </li>
+          <%= for entry <- @activity do %>
+            <%= if entry.kind == :human do %>
+              <li class="fz-fade" data-kind="human" data-status={entry.status}>
+                <div class={[
+                  "flex gap-1.5 text-[12px] font-semibold leading-snug",
+                  if(entry.status == :ok, do: "text-base-content", else: "text-error")
+                ]}>
+                  <span aria-hidden="true">👤</span>
+                  <span>{entry.text}</span>
+                </div>
+              </li>
+            <% else %>
+              <%= if entry.kind == :thought do %>
+                <li class="fz-fade" data-kind="thought">
+                  <div class="flex gap-1.5 text-[12px] italic leading-snug text-base-content/80">
+                    <span aria-hidden="true">💭</span>
+                    <span class="whitespace-pre-wrap">{entry.text}</span>
+                  </div>
+                </li>
+              <% else %>
+                <li class="fz-fade" data-kind="call" data-status={entry.status}>
+                  <div class={[
+                    "break-words font-mono text-[11px] font-bold",
+                    if(entry.status == :ok, do: "text-secondary", else: "text-error")
+                  ]}>
+                    {if entry.status == :ok, do: "✓", else: "✗"} {entry.call}
+                  </div>
+                  <div class="mt-0.5 text-[11px] text-muted">{entry.result}</div>
+                </li>
+              <% end %>
+            <% end %>
+          <% end %>
         </ol>
         <div class="flex items-center gap-2 border-t border-base-300 px-4 py-3">
           <%= if @connected do %>
@@ -1055,84 +1643,109 @@ defmodule FitzyoWeb.StoreLive do
       <div class="absolute inset-0 bg-[#1e2b24]/35" phx-click="toggle_cart" aria-hidden="true" />
       <div class="absolute inset-y-0 right-0 flex w-full max-w-[400px] flex-col bg-base-100 shadow-[-8px_0_24px_rgba(30,43,36,0.12)]">
         <div class="flex items-center justify-between border-b border-base-300 p-5">
-          <h2 id="cart-title" class="font-display text-lg">Cart</h2>
-          <button
-            type="button"
-            phx-click="toggle_cart"
-            aria-label="Close cart"
-            class="text-muted cursor-pointer"
-          >
-            <.icon name="hero-x-mark" class="size-5" />
-          </button>
+          <h2 id="cart-title" class="font-display text-lg">
+            Cart
+            <span :if={@cart.item_count > 0} class="ml-1 text-sm font-normal text-muted">
+              ({@cart.item_count})
+            </span>
+          </h2>
+          <div class="flex items-center gap-4">
+            <button
+              :if={@cart.items != []}
+              type="button"
+              id="cart-clear"
+              phx-click="clear_cart"
+              data-confirm="Remove every item from the cart?"
+              class="text-xs font-semibold text-error cursor-pointer hover:underline"
+            >
+              Remove all
+            </button>
+            <button
+              type="button"
+              phx-click="toggle_cart"
+              aria-label="Close cart"
+              class="text-muted cursor-pointer"
+            >
+              <.icon name="hero-x-mark" class="size-5" />
+            </button>
+          </div>
         </div>
 
-        <ul id="cart-items" class="fz-scroll flex flex-1 flex-col gap-3.5 overflow-y-auto px-5 py-4">
-          <li :if={@cart.items == []} id="cart-empty" class="py-10 text-center text-[13px] text-faint">
+        <div id="cart-items" class="fz-scroll flex flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
+          <p :if={@cart.items == []} id="cart-empty" class="py-10 text-center text-[13px] text-faint">
             Your cart is empty.
-          </li>
-          <li
-            :for={item <- @cart.items}
-            id={"cart-item-#{item.id}"}
-            data-cart-item-id={item.id}
-            data-variant-id={item.variant_id}
-            data-product-id={item.variant.product_id}
-            data-quantity={item.quantity}
-            class="flex gap-3 border-b border-base-200 pb-3.5"
+          </p>
+          <section
+            :for={{label, items} <- cart_groups(@cart.items)}
+            id={"cart-group-#{dom_slug(label || "everyone")}"}
+            data-label={label}
           >
-            <.product_art
-              name={item.variant.product.name}
-              hex={item.variant.color_hex}
-              class="size-16 shrink-0 rounded-[10px] [&>span:first-child]:text-lg"
-            />
-            <div class="min-w-0 flex-1">
-              <div :if={item.label} class="text-[11px] font-bold uppercase text-primary">
-                {item.label}
-              </div>
-              <.link
-                patch={~p"/products/#{item.variant.product_id}"}
-                phx-click="toggle_cart"
-                class="block truncate text-[13px] font-semibold hover:underline"
+            <h3 class="mb-2 text-[11px] font-bold uppercase tracking-wider text-primary">
+              {label || "Your picks"}
+            </h3>
+            <ul class="flex flex-col gap-3.5">
+              <li
+                :for={item <- items}
+                id={"cart-item-#{item.id}"}
+                data-cart-item-id={item.id}
+                data-variant-id={item.variant_id}
+                data-product-id={item.variant.product_id}
+                data-quantity={item.quantity}
+                class="flex gap-3 border-b border-base-200 pb-3.5"
               >
-                {item.variant.product.name}
-              </.link>
-              <div class="text-xs text-muted">
-                {humanize(item.variant.color)} / {item.variant.size}
-              </div>
-              <div class="mt-1.5 flex items-center justify-between">
-                <div class="flex items-center gap-1 rounded-full border border-base-300">
+                <.product_art
+                  name={item.variant.product.name}
+                  hex={item.variant.color_hex}
+                  class="size-16 shrink-0 rounded-[10px] [&>span:first-child]:text-lg"
+                />
+                <div class="min-w-0 flex-1">
+                  <.link
+                    patch={~p"/products/#{item.variant.product_id}"}
+                    phx-click="toggle_cart"
+                    class="block truncate text-[13px] font-semibold hover:underline"
+                  >
+                    {item.variant.product.name}
+                  </.link>
+                  <div class="text-xs text-muted">
+                    {humanize(item.variant.color)} / {item.variant.size}
+                  </div>
+                  <div class="mt-1.5 flex items-center justify-between">
+                    <div class="flex items-center gap-1 rounded-full border border-base-300">
+                      <button
+                        type="button"
+                        phx-click="cart_decrement"
+                        phx-value-id={item.id}
+                        aria-label="Decrease quantity"
+                        class="px-2 py-0.5 text-sm cursor-pointer"
+                      >
+                        −
+                      </button>
+                      <span class="min-w-4 text-center text-xs font-semibold">{item.quantity}</span>
+                      <button
+                        type="button"
+                        phx-click="cart_increment"
+                        phx-value-id={item.id}
+                        aria-label="Increase quantity"
+                        class="px-2 py-0.5 text-sm cursor-pointer"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <span class="text-[13px] font-bold">{format_price(item.line_total)}</span>
+                  </div>
                   <button
                     type="button"
-                    phx-click="cart_decrement"
+                    phx-click="remove_cart_item"
                     phx-value-id={item.id}
-                    aria-label="Decrease quantity"
-                    class="px-2 py-0.5 text-sm cursor-pointer"
+                    class="mt-1 text-xs text-error cursor-pointer hover:underline"
                   >
-                    −
-                  </button>
-                  <span class="min-w-4 text-center text-xs font-semibold">{item.quantity}</span>
-                  <button
-                    type="button"
-                    phx-click="cart_increment"
-                    phx-value-id={item.id}
-                    aria-label="Increase quantity"
-                    class="px-2 py-0.5 text-sm cursor-pointer"
-                  >
-                    +
+                    Remove
                   </button>
                 </div>
-                <span class="text-[13px] font-bold">{format_price(item.line_total)}</span>
-              </div>
-              <button
-                type="button"
-                phx-click="remove_cart_item"
-                phx-value-id={item.id}
-                class="mt-1 text-xs text-error cursor-pointer hover:underline"
-              >
-                Remove
-              </button>
-            </div>
-          </li>
-        </ul>
+              </li>
+            </ul>
+          </section>
+        </div>
 
         <div class="border-t border-base-300 p-5">
           <div class="mb-3.5 flex justify-between text-sm font-bold">
@@ -1163,6 +1776,78 @@ defmodule FitzyoWeb.StoreLive do
     """
   end
 
+  attr :cart, :map, required: true
+
+  defp checkout_review(assigns) do
+    ~H"""
+    <div
+      id="checkout-review"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-[#1e2b24]/45 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="checkout-review-title"
+    >
+      <div class="flex max-h-[85vh] w-full max-w-[440px] flex-col rounded-[20px] bg-base-100 p-6">
+        <h2 id="checkout-review-title" class="font-display text-xl">Review your order</h2>
+        <p class="mb-4 text-[13px] text-muted">
+          Check every line before placing the order. This is the step no agent can take for you.
+        </p>
+        <ul class="fz-scroll flex-1 divide-y divide-base-200 overflow-y-auto">
+          <li
+            :for={item <- @cart.items}
+            class="flex items-center justify-between gap-3 py-2 text-[13px]"
+            data-variant-id={item.variant_id}
+          >
+            <span class="min-w-0">
+              <span
+                :if={item.label}
+                class="mr-1 rounded-full bg-accent px-1.5 py-px text-[9px] font-bold text-accent-content"
+              >
+                {item.label}
+              </span>
+              <span class="font-semibold">{item.variant.product.name}</span>
+              <span class="text-muted"> · {humanize(item.variant.color)} / {item.variant.size} × {item.quantity}</span>
+            </span>
+            <span class="shrink-0 font-bold">{format_price(item.line_total)}</span>
+          </li>
+        </ul>
+        <div class="mt-4 flex justify-between border-t border-base-300 pt-3 text-sm font-bold">
+          <span>Total</span>
+          <span>{format_price(@cart.subtotal)}</span>
+        </div>
+        <div class="mt-4 flex gap-2">
+          <button
+            type="button"
+            id="cancel-checkout"
+            phx-click="cancel_checkout"
+            class="flex-1 rounded-xl border border-base-300 py-3 text-sm font-semibold cursor-pointer hover:bg-base-200"
+          >
+            Back to cart
+          </button>
+          <button
+            type="button"
+            id="confirm-checkout"
+            phx-hook="FzHoldToConfirm"
+            data-hold-ms="700"
+            aria-describedby="confirm-checkout-help"
+            class="relative flex-1 select-none overflow-hidden rounded-xl bg-primary py-3 text-sm font-bold text-primary-content cursor-pointer hover:brightness-95"
+          >
+            <span
+              class="absolute inset-y-0 left-0 w-0 bg-secondary/70 transition-[width] duration-75"
+              data-hold-fill
+              aria-hidden="true"
+            />
+            <span class="relative">Press and hold to place order</span>
+          </button>
+        </div>
+        <p id="confirm-checkout-help" class="mt-2 text-center text-[11px] text-faint">
+          Holding the button is your approval; an agent cannot do it for you. Demo only — no payment is processed.
+        </p>
+      </div>
+    </div>
+    """
+  end
+
   attr :confirmation, :map, required: true
 
   defp order_confirmation(assigns) do
@@ -1182,8 +1867,8 @@ defmodule FitzyoWeb.StoreLive do
           Order <strong class="text-base-content">{@confirmation.order_number}</strong>
           · {@confirmation.item_count} items · {format_price(@confirmation.subtotal)}
         </p>
-        <p class="mb-5 text-[13px] text-muted">
-          Human approval received. This is a demo — no payment was processed.
+        <p id="order-approved-by" class="mb-5 text-[13px] text-muted">
+          Approved by {@confirmation.approved_by}. This is a demo — no payment was processed.
         </p>
         <button
           type="button"

@@ -68,7 +68,17 @@ defmodule Fitzyo.Catalog.Product.Preparations.ApplyBrowseFilters do
     do: Ash.Query.filter(query, intersects(activities, ^activities))
 
   defp filter_gender(query, nil), do: query
-  defp filter_gender(query, gender), do: Ash.Query.filter(query, gender == ^gender)
+
+  # Unisex products belong to every shopper group of their age group, so
+  # "men" also finds unisex adult items and "boys" finds unisex youth items.
+  defp filter_gender(query, gender) do
+    age_group = Fitzyo.Catalog.Types.Gender.age_group(gender)
+
+    Ash.Query.filter(
+      query,
+      gender == ^gender or (gender == :unisex and age_group == ^age_group)
+    )
+  end
 
   defp filter_price_min(query, nil), do: query
   defp filter_price_min(query, min), do: Ash.Query.filter(query, price >= ^min)

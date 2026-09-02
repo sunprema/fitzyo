@@ -4,6 +4,7 @@ defmodule FitzyoWeb.StoreLive.State do
   that change it:
 
       filters · results · selected product · selected variant · comparison · cart
+      · agent annotations ("Fits Dad", recommendations) · agent plan
 
   Both the human UI (`FitzyoWeb.StoreLive` events) and the agent
   (`FitzyoWeb.StoreLive.AgentTools`) go through these functions, so there is
@@ -31,7 +32,10 @@ defmodule FitzyoWeb.StoreLive.State do
   @product_load [:category, :available, :size_guide_entries, variants: @variant_query]
   @results_load [:available, variants: @variant_query]
   @cart_load [:item_count, :subtotal, items: [:line_total, variant: [:available, :product]]]
-  @activity_limit 40
+  @activity_limit 60
+  @idle_after_ms Application.compile_env(:fitzyo, :agent_idle_ms, 6_000)
+
+  @idle_agent %{status: :idle, message: nil, progress: nil, explicit?: false, tick: 0}
 
   @type activity_entry :: %{call: String.t(), result: String.t(), status: :ok | :error}
 
@@ -52,7 +56,10 @@ defmodule FitzyoWeb.StoreLive.State do
       selected_color: nil,
       selected_size: nil,
       comparison: [],
+      annotations: %{},
+      plan: nil,
       activity: [],
+      agent: @idle_agent,
       agent_connected: false
     )
     |> stream_configure(:products, dom_id: &"product-#{&1.id}")
@@ -121,10 +128,12 @@ defmodule FitzyoWeb.StoreLive.State do
   def load_product(socket, id) do
     case fetch_product(id) do
       {:ok, product} ->
+        {color, size} = initial_selection(socket, product)
+
         {:ok,
          socket
          |> assign(product: product, page_title: product.name)
-         |> select_variant(socket.assigns.selected_color, socket.assigns.selected_size)}
+         |> select_variant(color, size)}
 
       {:error, _} ->
         {:error,
@@ -132,6 +141,35 @@ defmodule FitzyoWeb.StoreLive.State do
          |> put_flash(:error, "We couldn't find that product.")
          |> push_patch(to: index_path(socket.assigns.filters))}
     end
+  end
+
+  # The variant a product page should open on, in priority order:
+  #   1. an agent annotation for this product that names an in-stock variant
+  #   2. the shopper's existing cart line for this product
+  #   3. the color/size carried over from the previous page
+  #   4. (handled by select_variant) the first color and size with stock
+  # The page is the human-approval surface, so what the recommendation says
+  # and what "Add to Cart" adds must be the same thing.
+  defp initial_selection(socket, product) do
+    annotated =
+      socket.assigns.annotations
+      |> annotations_for(product.id)
+      |> Enum.map(& &1.variant_id)
+
+    in_cart =
+      socket.assigns.cart.items
+      |> Enum.filter(&(&1.variant.product_id == product.id))
+      |> Enum.map(& &1.variant_id)
+
+    (annotated ++ in_cart)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.find_value(fn variant_id ->
+      case Enum.find(product.variants, &(&1.id == variant_id and &1.inventory_quantity > 0)) do
+        nil -> nil
+        variant -> {variant.color, variant.size}
+      end
+    end)
+    |> Kernel.||({socket.assigns.selected_color, socket.assigns.selected_size})
   end
 
   @doc """
@@ -193,6 +231,118 @@ defmodule FitzyoWeb.StoreLive.State do
 
   def clear_comparison(socket), do: assign(socket, comparison: [])
 
+  # ---------------------------------------------------------------- agent annotations
+
+  @doc """
+  Records which variants an agent found to fit someone it calls `label`
+  ("Dad"). The retailer never learns who that is; it only shows the label.
+  Replaces any earlier matches for the same label.
+  """
+  def put_matches(socket, label, matches) when is_binary(label) and is_list(matches) do
+    fresh =
+      Enum.map(matches, fn m ->
+        %{
+          label: label,
+          product_id: m.product_id,
+          variant_id: m.variant_id,
+          source: :match,
+          match: m.match,
+          score: m.match_score,
+          reason: nil
+        }
+      end)
+
+    socket
+    |> update_annotations(fn annotations ->
+      annotations
+      |> drop_annotations(&(&1.label == label and &1.source == :match))
+      |> add_annotations(fresh)
+    end)
+  end
+
+  @doc "Attaches an agent-written recommendation to a product for `label`."
+  def recommend(socket, label, product_id, variant_id, reason) do
+    annotation = %{
+      label: label,
+      product_id: product_id,
+      variant_id: variant_id,
+      source: :recommendation,
+      match: %{},
+      score: nil,
+      reason: reason
+    }
+
+    update_annotations(socket, fn annotations ->
+      annotations
+      |> drop_annotations(
+        &(&1.label == label and &1.product_id == product_id and &1.source == :recommendation)
+      )
+      |> add_annotations([annotation])
+    end)
+  end
+
+  @doc "Human override: forget everything the agent attached under `label`."
+  def clear_label(socket, label) do
+    update_annotations(socket, &drop_annotations(&1, fn a -> a.label == label end))
+  end
+
+  @doc "Human override: remove one product's annotations for `label`."
+  def remove_annotation(socket, product_id, label) do
+    update_annotations(
+      socket,
+      &drop_annotations(&1, fn a -> a.label == label and a.product_id == product_id end)
+    )
+  end
+
+  @doc "Annotations for one product, or `[]`."
+  def annotations_for(annotations, product_id), do: Map.get(annotations, product_id, [])
+
+  @doc "The labels in use with how many products each covers, alphabetically."
+  def labels(annotations) do
+    annotations
+    |> Map.values()
+    |> List.flatten()
+    |> Enum.group_by(& &1.label)
+    |> Enum.map(fn {label, entries} ->
+      %{
+        label: label,
+        product_count: entries |> Enum.map(& &1.product_id) |> Enum.uniq() |> length()
+      }
+    end)
+    |> Enum.sort_by(& &1.label)
+  end
+
+  defp update_annotations(socket, fun) do
+    socket
+    |> assign(annotations: fun.(socket.assigns.annotations))
+    |> refresh_listing()
+  end
+
+  defp drop_annotations(annotations, pred) do
+    annotations
+    |> Enum.map(fn {product_id, entries} -> {product_id, Enum.reject(entries, pred)} end)
+    |> Enum.reject(fn {_id, entries} -> entries == [] end)
+    |> Map.new()
+  end
+
+  defp add_annotations(annotations, entries) do
+    Enum.reduce(entries, annotations, fn entry, acc ->
+      Map.update(acc, entry.product_id, [entry], &(&1 ++ [entry]))
+    end)
+  end
+
+  # Product cards live in a stream, so they only pick up new annotations when
+  # re-inserted. Cheap enough for a demo catalog.
+  defp refresh_listing(%{assigns: %{product: nil}} = socket), do: load_results(socket)
+  defp refresh_listing(socket), do: socket
+
+  # ---------------------------------------------------------------- agent plan
+
+  @doc "Stores the agent-presented shopping plan (title, groups of needs) for the human to read."
+  def put_plan(socket, plan) when is_map(plan), do: assign(socket, plan: plan)
+
+  def clear_plan(socket), do: assign(socket, plan: nil)
+
   # ---------------------------------------------------------------- cart
 
   @doc "Reloads the session cart with totals and item details."
@@ -202,13 +352,106 @@ defmodule FitzyoWeb.StoreLive.State do
 
   # ---------------------------------------------------------------- agent activity & focus
 
-  @doc "Appends a high-level entry to the agent activity log (newest first)."
+  @doc """
+  Appends a tool call to the agent activity feed (chronological) and marks the
+  agent as working until it goes quiet for a few seconds.
+  """
   def log_activity(socket, call, result, status \\ :ok) do
-    entry = %{call: call, result: result, status: status, at: DateTime.utc_now()}
+    entry = %{kind: :call, call: call, result: result, status: status, at: DateTime.utc_now()}
 
     socket
-    |> assign(agent_connected: true)
-    |> update(:activity, &Enum.take([entry | &1], @activity_limit))
+    |> append_activity(entry)
+    |> mark_working()
+  end
+
+  @doc """
+  Records a human action in the same feed as tool calls, so the audit trail
+  shows who did what. Does not mark the agent as working.
+  """
+  def log_human(socket, text, status \\ :ok) when is_binary(text) do
+    append_activity(socket, %{kind: :human, text: text, status: status, at: DateTime.utc_now()})
+  end
+
+  @doc """
+  Streams an agent thought into the feed. With `append?` the text continues
+  the previous thought instead of starting a new one, so an agent can stream
+  a sentence in chunks.
+  """
+  def log_thought(socket, text, append? \\ false) when is_binary(text) do
+    activity = socket.assigns.activity
+
+    case {append?, List.last(activity)} do
+      {true, %{kind: :thought} = last} ->
+        updated = %{last | text: last.text <> text, at: DateTime.utc_now()}
+        assign(socket, activity: List.replace_at(activity, -1, updated))
+
+      _ ->
+        append_activity(socket, %{kind: :thought, text: text, at: DateTime.utc_now()})
+    end
+    |> mark_working()
+  end
+
+  @doc """
+  The agent's explicit status for the banner: `:working`, `:done`, or `:idle`,
+  with an optional message and `%{done, total}` progress. Explicit status
+  sticks until the agent changes it; auto-idle only applies to implicit work.
+  """
+  def set_agent_status(socket, status, message, progress)
+      when status in [:working, :done, :idle] do
+    agent = socket.assigns.agent
+
+    assign(socket,
+      agent: %{
+        agent
+        | status: status,
+          message: message,
+          progress: progress,
+          explicit?: status != :idle,
+          tick: agent.tick + 1
+      },
+      agent_connected: true
+    )
+  end
+
+  @doc "Human dismissed the banner."
+  def dismiss_agent_status(socket), do: set_agent_status(socket, :idle, nil, nil)
+
+  @doc "Idle timer fired; go idle if nothing happened since it was scheduled."
+  def agent_idle(socket, tick) do
+    agent = socket.assigns.agent
+
+    if agent.tick == tick and not agent.explicit? do
+      assign(socket, agent: %{agent | status: :idle, message: nil, progress: nil})
+    else
+      socket
+    end
+  end
+
+  @doc "The most recent thought, for the banner."
+  def latest_thought(activity) do
+    activity
+    |> Enum.reverse()
+    |> Enum.find_value(fn
+      %{kind: :thought, text: t} -> t
+      _ -> nil
+    end)
+  end
+
+  defp append_activity(socket, entry) do
+    update(socket, :activity, fn activity -> Enum.take(activity ++ [entry], -@activity_limit) end)
+  end
+
+  defp mark_working(socket) do
+    agent = socket.assigns.agent
+    tick = agent.tick + 1
+    Process.send_after(self(), {:fz_agent_idle, tick}, @idle_after_ms)
+
+    status = if agent.explicit?, do: agent.status, else: :working
+
+    assign(socket,
+      agent: %{agent | status: status, tick: tick},
+      agent_connected: true
+    )
   end
 
   @doc "Asks the browser to scroll a DOM element into view and highlight it briefly."

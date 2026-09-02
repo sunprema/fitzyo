@@ -192,8 +192,69 @@ defmodule FitzyoWeb.StoreLiveTest do
       view |> element("#cart-items li [aria-label='Decrease quantity']") |> render_click()
       assert has_element?(view, "#cart-count", "1")
 
+      # checkout is a review step plus a press-and-hold approval gesture
       view |> element("#checkout") |> render_click()
+      assert has_element?(view, "#checkout-review li[data-variant-id='#{ctx.shirt.id}_blue_l']")
+      assert_push_event(view, "fz:checkout_nonce", %{nonce: nonce})
+      refute has_element?(view, "#order-confirmation")
+      assert has_element?(view, "#agent-activity li[data-kind='human']", "Opened order review")
+
+      view |> element("#cancel-checkout") |> render_click()
+      refute has_element?(view, "#checkout-review")
+      assert has_element?(view, "#cart-count", "1")
+
+      view |> element("#checkout") |> render_click()
+      assert_push_event(view, "fz:checkout_nonce", %{nonce: nonce2})
+      refute nonce == nonce2
+
+      # a synthetic click carries no gesture, no trusted flag, and no nonce
+      render_hook(view, "confirm_checkout", %{})
+      refute has_element?(view, "#order-confirmation")
+
+      assert has_element?(
+               view,
+               "#agent-activity li[data-kind='human'][data-status='error']",
+               "Checkout blocked"
+             )
+
+      # a stale nonce, a short hold, or an untrusted event are all refused
+      render_hook(view, "confirm_checkout", %{
+        "nonce" => nonce,
+        "held_ms" => 900,
+        "trusted" => true
+      })
+
+      render_hook(view, "confirm_checkout", %{
+        "nonce" => nonce2,
+        "held_ms" => 100,
+        "trusted" => true
+      })
+
+      render_hook(view, "confirm_checkout", %{
+        "nonce" => nonce2,
+        "held_ms" => 900,
+        "trusted" => false
+      })
+
+      refute has_element?(view, "#order-confirmation")
+      assert has_element?(view, "#cart-count", "1")
+
+      # the genuine gesture places the order once
+      render_hook(view, "confirm_checkout", %{
+        "nonce" => nonce2,
+        "held_ms" => 900,
+        "trusted" => true
+      })
+
       assert has_element?(view, "#order-confirmation", "Order confirmed")
+      assert has_element?(view, "#order-approved-by", "press-and-hold")
+
+      assert has_element?(
+               view,
+               "#agent-activity li[data-kind='human']",
+               "Approved and placed order FZ-"
+             )
+
       refute has_element?(view, "#cart-count")
 
       view |> element("#order-confirmation button", "Done") |> render_click()
@@ -213,6 +274,22 @@ defmodule FitzyoWeb.StoreLiveTest do
       view |> element("#cart-button") |> render_click()
       view |> element("#cart-items li button", "Remove") |> render_click()
       assert has_element?(view, "#cart-empty")
+      assert has_element?(view, "#checkout[disabled]")
+    end
+
+    test "remove all empties the cart from the drawer", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/products/#{ctx.shirt.id}")
+      refute has_element?(view, "#cart-clear")
+
+      view |> element("#add-to-cart") |> render_click()
+      view |> element("#add-to-cart") |> render_click()
+      assert has_element?(view, "#cart-count", "2")
+      assert has_element?(view, "#cart-title", "(2)")
+
+      view |> element("#cart-clear") |> render_click()
+      assert has_element?(view, "#cart-empty")
+      refute has_element?(view, "#cart-count")
+      refute has_element?(view, "#cart-clear")
       assert has_element?(view, "#checkout[disabled]")
     end
 

@@ -47,7 +47,7 @@ defmodule Fitzyo.CatalogFixtures do
       quantity = if is_function(stock, 2), do: stock.(color, size), else: stock
 
       Catalog.create_variant!(%{
-        id: "#{product.id}_#{color}_#{String.downcase(size)}",
+        id: "#{product.id}_#{color}_#{slug(size)}",
         product_id: product.id,
         size: size,
         color: color,
@@ -56,6 +56,10 @@ defmodule Fitzyo.CatalogFixtures do
         position: ci * 100 + si
       })
     end
+  end
+
+  defp slug(value) do
+    value |> String.downcase() |> String.replace(~r/[^a-z0-9]+/, "_") |> String.trim("_")
   end
 
   def size_guide_fixture(product, rows) do

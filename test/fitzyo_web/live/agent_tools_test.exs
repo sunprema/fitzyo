@@ -14,7 +14,8 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
 
   @tool_names ~w(get_store_info get_categories search_products filter_products get_product
                  get_variants get_size_guide find_matching_variants compare_products get_cart
-                 add_to_cart remove_from_cart update_cart_item focus_product focus_filter)
+                 add_to_cart remove_from_cart update_cart_item clear_cart recommend_product
+                 present_plan agent_update ask_human get_store_state focus_product focus_filter)
 
   setup do
     shirts =
@@ -100,7 +101,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
       assert Enum.find(tools, &(&1.name == "get_cart")).annotations.readOnlyHint
       refute Enum.find(tools, &(&1.name == "add_to_cart")).annotations.readOnlyHint
       refute Enum.any?(tools, &(&1.annotations[:destructive?] == true))
-      assert length(AgentTools.tools()) == 15
+      assert length(AgentTools.tools()) == 21
     end
 
     test "unknown tools and malformed input return structured errors", %{conn: conn} do
@@ -142,6 +143,18 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
       assert_patch(view, ~p"/?q=bahama")
       assert has_element?(view, "#store-search-input[value='bahama']")
       refute has_element?(view, "#product-#{ctx.short.id}")
+
+      # a new search starts fresh unless the agent asks to keep the filters
+      ok!(view, "filter_products", %{"category" => ctx.shorts.id})
+      assert ok!(view, "search_products", %{"query" => "bahama"}).total == 1
+      assert_patch(view, ~p"/?q=bahama")
+
+      ok!(view, "filter_products", %{"category" => ctx.shorts.id})
+
+      assert ok!(view, "search_products", %{"query" => "bahama", "keep_filters" => true}).total ==
+               0
+
+      assert has_element?(view, "#filter-category-#{ctx.shorts.id}[aria-pressed='true']")
     end
 
     test "filter_products replaces filters, updates the URL, and validates input", ctx do
@@ -247,6 +260,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
         })
 
       assert result.strict
+      refute result.truncated
       assert [match] = result.matches
       assert match.variant_id == "#{ctx.columbia.id}_blue_xl"
       assert match.match == %{size: true, color: true, brand: true, fit: true, price: true}
@@ -381,6 +395,27 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
       refute has_element?(view, "#cart-count")
     end
 
+    test "clear_cart empties everything at once", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      ok!(view, "add_to_cart", %{
+        "product_id" => ctx.columbia.id,
+        "variant_id" => "#{ctx.columbia.id}_blue_xl",
+        "quantity" => 2
+      })
+
+      ok!(view, "add_to_cart", %{
+        "product_id" => ctx.short.id,
+        "variant_id" => "#{ctx.short.id}_black_32"
+      })
+
+      assert has_element?(view, "#cart-count", "3")
+
+      assert ok!(view, "clear_cart").cart == %{item_count: 0, subtotal: 0.0, currency: "USD"}
+      refute has_element?(view, "#cart-count")
+      assert ok!(view, "get_cart").cart.items == []
+    end
+
     test "the agent's cart is the human's cart", ctx do
       conn = get(ctx.conn, ~p"/")
       {:ok, view, _html} = live(conn, ~p"/products/#{ctx.short.id}")
@@ -389,6 +424,516 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
       %{cart: cart} = ok!(view, "get_cart")
       assert [%{product_id: id, size: "32"}] = cart.items
       assert id == ctx.short.id
+    end
+  end
+
+  describe "agent annotations" do
+    test "a labelled match badges products, tags the variant, and the human can clear it", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      result =
+        ok!(view, "find_matching_variants", %{
+          "category" => ctx.shirts.id,
+          "size" => "XL",
+          "color" => ["blue"],
+          "label" => "Dad"
+        })
+
+      assert result.label == "Dad"
+      assert has_element?(view, "#product-#{ctx.columbia.id}[data-fits='Dad']", "Fits Dad")
+      refute has_element?(view, "#product-#{ctx.patagonia.id}[data-fits]")
+      assert has_element?(view, "#fit-label-dad", "1 product")
+
+      # the badge follows the product to its detail page and marks the variant
+      view |> element("#product-#{ctx.columbia.id} a", "Bahama Shirt") |> render_click()
+
+      assert has_element?(
+               view,
+               "#fit-match-#{ctx.columbia.id}-dad-match[data-variant-id='#{ctx.columbia.id}_blue_xl']"
+             )
+
+      assert has_element?(view, "#variant-#{ctx.columbia.id}_blue_xl span", "Dad")
+
+      state = ok!(view, "get_store_state").state
+
+      assert [%{label: "Dad", source: "match", match: %{size: true, color: true}}] =
+               state.annotations
+
+      # human override: clear everything the agent attached under "Dad"
+      view |> element("#fit-label-dad button") |> render_click()
+      refute has_element?(view, "#fit-labels")
+      refute has_element?(view, "#fit-match-#{ctx.columbia.id}-dad-match")
+      assert ok!(view, "get_store_state").state.annotations == []
+    end
+
+    test "relaxed matches are reported but not badged as fits", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      result =
+        ok!(view, "find_matching_variants", %{
+          "category" => ctx.shirts.id,
+          "size" => "XL",
+          "color" => ["red"],
+          "label" => "Dad"
+        })
+
+      refute result.strict
+      refute has_element?(view, "#fit-labels")
+    end
+
+    test "recommend_product shows an agent-written reason the human can dismiss", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/products/#{ctx.columbia.id}")
+
+      result =
+        ok!(view, "recommend_product", %{
+          "product_id" => ctx.columbia.id,
+          "variant_id" => "#{ctx.columbia.id}_blue_xl",
+          "label" => "Dad",
+          "reason" => "Matches his size, preferred color and casual style."
+        })
+
+      assert result.success
+
+      assert has_element?(
+               view,
+               "#fit-match-#{ctx.columbia.id}-dad-recommendation",
+               "preferred color"
+             )
+
+      assert_push_event(view, "fz:focus", %{id: "product-" <> _})
+
+      view |> element("#fit-match-#{ctx.columbia.id}-dad-recommendation button") |> render_click()
+      refute has_element?(view, "#fit-match-#{ctx.columbia.id}-dad-recommendation")
+
+      assert %{"code" => "VARIANT_NOT_FOUND"} =
+               error!(view, "recommend_product", %{
+                 "product_id" => ctx.columbia.id,
+                 "variant_id" => "nope",
+                 "label" => "Dad",
+                 "reason" => "x"
+               })
+    end
+
+    test "present_plan renders the agent's plan and validates it", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      result =
+        ok!(view, "present_plan", %{
+          "title" => "Hawaii — 7 day wardrobe",
+          "subtitle" => "Beach, hiking, dinners",
+          "groups" => [
+            %{
+              "label" => "Dad",
+              "items" => [
+                %{"text" => "3 casual shirts", "status" => "have"},
+                %{"text" => "1 hiking short", "status" => "need"}
+              ]
+            },
+            %{
+              "label" => "Mom",
+              "items" => [
+                %{"text" => "1 sundress", "status" => "added", "product_id" => ctx.columbia.id}
+              ]
+            }
+          ]
+        })
+
+      assert result.groups == 2
+      assert has_element?(view, "#agent-plan", "Hawaii — 7 day wardrobe")
+      assert has_element?(view, "#agent-plan li[data-status='need']", "1 hiking short")
+      assert ok!(view, "get_store_state").state.plan.title == "Hawaii — 7 day wardrobe"
+
+      view |> element("#agent-plan button[aria-label='Dismiss plan']") |> render_click()
+      refute has_element?(view, "#agent-plan")
+
+      assert %{"code" => "INVALID_OPERATION"} =
+               error!(view, "present_plan", %{
+                 "title" => "x",
+                 "groups" => [
+                   %{"label" => "Dad", "items" => [%{"text" => "y", "status" => "maybe"}]}
+                 ]
+               })
+    end
+
+    test "get_store_state reflects what the human changed", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      ok!(view, "filter_products", %{"category" => ctx.shirts.id, "color" => ["blue"]})
+      # the human swaps blue for sage
+      view |> element("#filter-color-blue") |> render_click()
+      view |> element("#filter-color-sage") |> render_click()
+
+      state = ok!(view, "get_store_state").state
+      assert state.view == "results"
+      assert state.filters["color"] == ["sage"]
+      assert state.filters["category"] == ctx.shirts.id
+      assert state.results_count == 1
+      assert state.cart.item_count == 0
+    end
+
+    test "the cart drawer groups lines by the agent's labels", ctx do
+      conn = get(ctx.conn, ~p"/")
+      {:ok, view, _html} = live(conn, ~p"/products/#{ctx.short.id}")
+
+      ok!(view, "add_to_cart", %{
+        "product_id" => ctx.columbia.id,
+        "variant_id" => "#{ctx.columbia.id}_blue_xl",
+        "label" => "Dad"
+      })
+
+      ok!(view, "add_to_cart", %{
+        "product_id" => ctx.patagonia.id,
+        "variant_id" => "#{ctx.patagonia.id}_black_l",
+        "label" => "Mom"
+      })
+
+      view |> element("#add-to-cart") |> render_click()
+
+      assert has_element?(view, "#cart-group-dad h3", "Dad")
+      assert has_element?(view, "#cart-group-mom h3", "Mom")
+      assert has_element?(view, "#cart-group-everyone h3", "Your picks")
+      assert has_element?(view, "#cart-group-dad li[data-product-id='#{ctx.columbia.id}']")
+    end
+  end
+
+  describe "agent presence" do
+    test "any tool call shows the working banner until the agent goes quiet", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      refute has_element?(view, "#agent-banner")
+
+      ok!(view, "get_categories")
+      assert has_element?(view, "#agent-banner[data-status='working']", "Agent is working")
+
+      # the idle timer fires with the tick it was scheduled with
+      %{socket: %{assigns: %{agent: %{tick: tick}}}} = :sys.get_state(view.pid)
+      send(view.pid, {:fz_agent_idle, tick})
+      refute has_element?(view, "#agent-banner")
+    end
+
+    test "agent_update drives the banner, progress, and a streamed thought feed", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      ok!(view, "agent_update", %{
+        "status" => "working",
+        "message" => "Planning Dad's outfits",
+        "thought" => "Dad already owns three shirts,",
+        "progress" => %{"done" => 2, "total" => 10}
+      })
+
+      assert has_element?(
+               view,
+               "#agent-banner[data-status='working'] #agent-banner-message",
+               "Planning Dad's outfits"
+             )
+
+      assert has_element?(view, "#agent-progress", "2 / 10")
+      assert has_element?(view, "#agent-activity li[data-kind='thought']", "three shirts")
+
+      ok!(view, "agent_update", %{"thought" => " so he only needs two more.", "append" => true})
+
+      assert has_element?(
+               view,
+               "#agent-activity li[data-kind='thought']",
+               "three shirts, so he only needs two more."
+             )
+
+      assert view
+             |> render()
+             |> LazyHTML.from_fragment()
+             |> LazyHTML.query("li[data-kind='thought']")
+             |> Enum.count() == 1
+
+      # explicit status survives the auto-idle timer
+      %{socket: %{assigns: %{agent: %{tick: tick}}}} = :sys.get_state(view.pid)
+      send(view.pid, {:fz_agent_idle, tick})
+      assert has_element?(view, "#agent-banner[data-status='working']")
+
+      ok!(view, "agent_update", %{"status" => "done", "message" => "Cart is ready for review"})
+      assert has_element?(view, "#agent-banner[data-status='done']", "Agent finished")
+      assert ok!(view, "get_store_state").state.agent.status == "done"
+
+      view |> element("#agent-banner button[aria-label='Dismiss']") |> render_click()
+      refute has_element?(view, "#agent-banner")
+
+      assert %{"code" => "INVALID_FILTER"} =
+               error!(view, "agent_update", %{"status" => "sleeping"})
+
+      assert %{"code" => "INVALID_OPERATION"} =
+               error!(view, "agent_update", %{"progress" => %{"done" => 1}})
+    end
+
+    test "selected items appear in the tray as the agent adds them", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      refute has_element?(view, "#selections")
+
+      ok!(view, "add_to_cart", %{
+        "product_id" => ctx.columbia.id,
+        "variant_id" => "#{ctx.columbia.id}_blue_xl",
+        "label" => "Dad"
+      })
+
+      assert has_element?(view, "#selections article[data-label='Dad']", "Bahama Shirt")
+      assert has_element?(view, "#selections", "1 item")
+
+      ok!(view, "add_to_cart", %{
+        "product_id" => ctx.short.id,
+        "variant_id" => "#{ctx.short.id}_black_32",
+        "label" => "Milo"
+      })
+
+      assert has_element?(view, "#selections article[data-label='Milo']", "Quandary Short")
+      assert has_element?(view, "#selections", "2 items")
+
+      ok!(view, "clear_cart")
+      refute has_element?(view, "#selections")
+    end
+  end
+
+  describe "product page preselection" do
+    # The product page is the human-approval surface: what the recommendation
+    # says and what "Add to Cart" adds must be the same variant.
+    test "opening a recommended product preselects the recommended variant", ctx do
+      conn = get(ctx.conn, ~p"/")
+      {:ok, view, _html} = live(conn, ~p"/")
+      sage_l = "#{ctx.columbia.id}_sage_l"
+
+      ok!(view, "recommend_product", %{
+        "product_id" => ctx.columbia.id,
+        "variant_id" => sage_l,
+        "label" => "Dad",
+        "reason" => "Fits."
+      })
+
+      # navigate the human way, not via focus_product
+      view |> element("#product-#{ctx.columbia.id} a", "Bahama Shirt") |> render_click()
+
+      assert has_element?(
+               view,
+               "#product-#{ctx.columbia.id}[data-selected-variant-id='#{sage_l}']"
+             )
+
+      assert has_element?(view, "#add-to-cart[phx-value-variant_id='#{sage_l}']")
+      assert ok!(view, "get_store_state").state.selected_variant_id == sage_l
+    end
+
+    test "opening a product already in the cart preselects the cart's variant", ctx do
+      conn = get(ctx.conn, ~p"/")
+      {:ok, view, _html} = live(conn, ~p"/")
+      blue_xl = "#{ctx.columbia.id}_blue_xl"
+
+      ok!(view, "add_to_cart", %{"product_id" => ctx.columbia.id, "variant_id" => blue_xl})
+      view |> element("#product-#{ctx.columbia.id} a", "Bahama Shirt") |> render_click()
+
+      assert has_element?(view, "#add-to-cart[phx-value-variant_id='#{blue_xl}']")
+    end
+
+    test "an annotation wins over a cart line, and a sold-out recommendation falls through",
+         ctx do
+      conn = get(ctx.conn, ~p"/")
+      {:ok, view, _html} = live(conn, ~p"/")
+      blue_xl = "#{ctx.columbia.id}_blue_xl"
+      sage_l = "#{ctx.columbia.id}_sage_l"
+      sage_xl = "#{ctx.columbia.id}_sage_xl"
+
+      ok!(view, "add_to_cart", %{"product_id" => ctx.columbia.id, "variant_id" => blue_xl})
+
+      ok!(view, "recommend_product", %{
+        "product_id" => ctx.columbia.id,
+        "variant_id" => sage_l,
+        "label" => "Dad",
+        "reason" => "Fits."
+      })
+
+      view |> element("#product-#{ctx.columbia.id} a", "Bahama Shirt") |> render_click()
+      assert has_element?(view, "#add-to-cart[phx-value-variant_id='#{sage_l}']")
+
+      # sold-out recommendation: fall through to the cart line rather than an unpurchasable pick
+      ok!(view, "recommend_product", %{
+        "product_id" => ctx.columbia.id,
+        "variant_id" => sage_xl,
+        "label" => "Dad",
+        "reason" => "Fits."
+      })
+
+      view |> element("#back-to-results") |> render_click()
+      view |> element("#product-#{ctx.columbia.id} a", "Bahama Shirt") |> render_click()
+      assert has_element?(view, "#add-to-cart[phx-value-variant_id='#{blue_xl}']")
+    end
+
+    test "without annotation or cart line the first in-stock variant is preselected", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/products/#{ctx.columbia.id}")
+      assert has_element?(view, "#add-to-cart[phx-value-variant_id='#{ctx.columbia.id}_blue_l']")
+    end
+
+    test "add_to_cart leaves the active filters alone", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      ok!(view, "filter_products", %{"category" => ctx.shirts.id, "color" => ["blue"]})
+
+      ok!(view, "add_to_cart", %{
+        "product_id" => ctx.columbia.id,
+        "variant_id" => "#{ctx.columbia.id}_blue_xl"
+      })
+
+      assert has_element?(view, "#filter-color-blue[aria-pressed='true']")
+      assert ok!(view, "get_store_state").state.filters["category"] == ctx.shirts.id
+      refute has_element?(view, "#product-#{ctx.short.id}")
+    end
+  end
+
+  describe "ask_human" do
+    # ask_human is a blocking round-trip: the call is held open until the
+    # shopper acts, then the reply is pushed with the original call id.
+    defp ask(view, input) do
+      id = System.unique_integer([:positive])
+      render_hook(view, "webmcp:call", %{"id" => id, "tool" => "ask_human", "input" => input})
+      refute_push_event(view, "webmcp:result", %{id: ^id})
+      id
+    end
+
+    defp answered(view, id) do
+      assert_push_event(view, "webmcp:result", %{id: ^id, status: "ok", result: result})
+      result
+    end
+
+    test "renders options, blocks, and resolves with the chosen option", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      id =
+        ask(view, %{
+          "question" => "Both dinner pieces put you over budget. Which one?",
+          "subtitle" => "Budget is $600; this puts you at $743",
+          "options" => [
+            %{"id" => "skip_shirt", "label" => "Skip Dad's shirt", "description" => "Saves $118"},
+            %{
+              "id" => "skip_dress",
+              "label" => "Skip Mom's dress",
+              "product_id" => ctx.columbia.id,
+              "variant_id" => "#{ctx.columbia.id}_blue_xl"
+            },
+            %{"id" => "go_over", "label" => "Go over budget"}
+          ]
+        })
+
+      assert has_element?(view, "#agent-question", "Which one?")
+      assert has_element?(view, "#agent-banner[data-status='waiting']", "Waiting for you")
+      assert has_element?(view, "#question-option-skip_dress", "Bahama Shirt")
+      assert has_element?(view, "#question-option-skip_dress", "Blue / XL")
+      assert has_element?(view, "#agent-activity li[data-kind='call']", "ask_human")
+      assert_push_event(view, "fz:focus", %{id: "agent-question"})
+
+      state = ok!(view, "get_store_state").state
+      assert state.pending_question.question =~ "over budget"
+
+      assert Enum.map(state.pending_question.options, & &1.id) == [
+               "skip_shirt",
+               "skip_dress",
+               "go_over"
+             ]
+
+      # the human keeps full control while the question is open
+      view |> element("#filter-category-#{ctx.shirts.id}") |> render_click()
+      assert has_element?(view, "#agent-question")
+      assert ok!(view, "get_store_state").state.cart.item_count == 0
+
+      view |> element("#question-option-skip_shirt") |> render_click()
+      result = answered(view, id)
+
+      assert %{answered: true, selected: ["skip_shirt"], free_text: nil, question_id: "q_" <> _} =
+               result
+
+      refute has_element?(view, "#agent-question")
+      refute has_element?(view, "#agent-banner[data-status='waiting']")
+
+      assert has_element?(
+               view,
+               "#agent-activity li[data-kind='human']",
+               "Answered: Skip Dad's shirt"
+             )
+
+      assert ok!(view, "get_store_state").state.pending_question == nil
+    end
+
+    test "allow_multiple returns every selected id and free text comes back verbatim", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      id =
+        ask(view, %{
+          "question" => "Which of these can go?",
+          "options" => [
+            %{"id" => "a", "label" => "A"},
+            %{"id" => "b", "label" => "B"},
+            %{"id" => "c", "label" => "C"}
+          ],
+          "allow_multiple" => true,
+          "allow_free_text" => true
+        })
+
+      view
+      |> form("#agent-question-form", %{
+        "selected" => ["a", "c"],
+        "free_text" => "  keep B for now "
+      })
+      |> render_submit()
+
+      assert %{answered: true, selected: ["a", "c"], free_text: "keep B for now"} =
+               answered(view, id)
+
+      # free-text only prompt
+      id = ask(view, %{"question" => "What size does the shirt need to be?"})
+      view |> form("#agent-question-form", %{"free_text" => "XL"}) |> render_submit()
+      assert %{answered: true, selected: [], free_text: "XL"} = answered(view, id)
+    end
+
+    test "dismissal, timeout, and supersession resolve as answered: false", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      options = [%{"id" => "y", "label" => "Yes"}, %{"id" => "n", "label" => "No"}]
+
+      id = ask(view, %{"question" => "Go over budget?", "options" => options})
+      view |> element("#dismiss-question") |> render_click()
+      assert %{answered: false, reason: "dismissed"} = answered(view, id)
+      assert has_element?(view, "#agent-activity li[data-kind='human']", "Dismissed")
+
+      id =
+        ask(view, %{"question" => "Go over budget?", "options" => options, "timeout_ms" => 5000})
+
+      %{socket: %{assigns: %{question: %{id: qid}}}} = :sys.get_state(view.pid)
+      send(view.pid, {:fz_question_timeout, qid})
+      assert %{answered: false, reason: "timeout", question_id: ^qid} = answered(view, id)
+      refute has_element?(view, "#agent-question")
+
+      assert has_element?(
+               view,
+               "#agent-activity li[data-kind='call'][data-status='error']",
+               "timeout"
+             )
+
+      first = ask(view, %{"question" => "First?", "options" => options})
+      second = ask(view, %{"question" => "Second?", "options" => options})
+      assert %{answered: false, reason: "superseded"} = answered(view, first)
+      assert has_element?(view, "#agent-question", "Second?")
+      view |> element("#question-option-y") |> render_click()
+      assert %{answered: true, selected: ["y"]} = answered(view, second)
+    end
+
+    test "invalid questions fail immediately with a structured error", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      id = System.unique_integer([:positive])
+
+      render_hook(view, "webmcp:call", %{
+        "id" => id,
+        "tool" => "ask_human",
+        "input" => %{"question" => "Pick", "options" => [%{"id" => "only", "label" => "One"}]}
+      })
+
+      assert_push_event(view, "webmcp:result", %{id: ^id, status: "error", error: json})
+      assert %{"code" => "INVALID_OPERATION"} = Jason.decode!(json)
+      refute has_element?(view, "#agent-question")
+
+      id = System.unique_integer([:positive])
+      render_hook(view, "webmcp:call", %{"id" => id, "tool" => "ask_human", "input" => %{}})
+      assert_push_event(view, "webmcp:result", %{id: ^id, status: "error"})
     end
   end
 

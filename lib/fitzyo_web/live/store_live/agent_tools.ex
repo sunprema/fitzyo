@@ -58,11 +58,16 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
       %{
         name: "search_products",
         description:
-          "Full-text search over product names, brands, and descriptions. Sets the store's search box; active filters stay applied. Returns matching products.",
+          "Full-text search over product names, brands, and descriptions. Sets the store's search box and, unless keep_filters is true, clears the structured filters so the search starts fresh. Returns matching products.",
         input_schema:
           object(
             %{
               query: %{type: "string", description: "Words to look for, e.g. \"linen shirt\""},
+              keep_filters: %{
+                type: "boolean",
+                default: false,
+                description: "Search within the currently active filters instead of clearing them"
+              },
               limit: %{
                 type: "integer",
                 minimum: 1,
@@ -129,6 +134,11 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
             activity: string_array("Intended activities (any of)"),
             gender: %{type: "string", enum: gender_values()},
             price_max: %{type: "number", minimum: 0},
+            label: %{
+              type: "string",
+              description:
+                "Who these constraints are for, as the shopper says it (e.g. \"Dad\"). When given, matching products are badged \"Fits Dad\" in the store UI. Not stored beyond this session."
+            },
             limit: %{type: "integer", minimum: 1, maximum: 50}
           }),
         annotations: @state_change
@@ -190,6 +200,108 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
             ["variant_id", "quantity"]
           ),
         annotations: @state_change
+      },
+      %{
+        name: "clear_cart",
+        description:
+          "Remove every line from the cart, e.g. to start over after the shopper changes the plan. Prefer remove_from_cart for single lines.",
+        input_schema: object(%{}),
+        annotations: %{readOnlyHint: false, destructive?: false, idempotentHint: true}
+      },
+      %{
+        name: "recommend_product",
+        description:
+          "Show the human an agent-written recommendation on a product (\"✦ FitzYo Recommendation — Dad: matches his size, preferred color and casual style\"). Presentation only; nothing is added to the cart.",
+        input_schema:
+          object(
+            %{
+              product_id: %{type: "string"},
+              variant_id: %{
+                type: "string",
+                description: "The specific size/color being recommended"
+              },
+              label: %{type: "string", description: "Who it is for, e.g. \"Mom\""},
+              reason: %{type: "string", description: "One or two sentences the shopper will read"}
+            },
+            ["product_id", "label", "reason"]
+          ),
+        annotations: @state_change
+      },
+      %{
+        name: "present_plan",
+        description:
+          "Show the human your shopping plan in the store's agent panel: a title and groups (one per person) of needs with a status each. Replaces any earlier plan. Presentation only.",
+        input_schema:
+          object(
+            %{
+              title: %{type: "string", description: "e.g. \"Hawaii — 7 day wardrobe\""},
+              subtitle: %{
+                type: "string",
+                description: "e.g. \"Beach, hiking, dinners · budget $600\""
+              },
+              groups: %{
+                type: "array",
+                minItems: 1,
+                items:
+                  object(
+                    %{
+                      label: %{type: "string", description: "Person or group, e.g. \"Dad\""},
+                      items: %{
+                        type: "array",
+                        items:
+                          object(
+                            %{
+                              text: %{
+                                type: "string",
+                                description: "e.g. \"2 lightweight shirts\""
+                              },
+                              status: %{type: "string", enum: ~w(have need added skipped)},
+                              product_id: %{type: "string"}
+                            },
+                            ["text", "status"]
+                          )
+                      }
+                    },
+                    ["label", "items"]
+                  )
+              }
+            },
+            ["title", "groups"]
+          ),
+        annotations: @state_change
+      },
+      %{
+        name: "agent_update",
+        description:
+          "Tell the human what you are doing, like a coding agent narrating its work. status drives a banner at the top of the page (working / done / idle), message is the banner headline, thought streams into the activity feed (pass append: true to continue the previous thought in chunks), progress is {done, total}. Cheap; call it before and after each step.",
+        input_schema:
+          object(%{
+            status: %{type: "string", enum: ~w(working done idle)},
+            message: %{type: "string", description: "e.g. \"Finding Milo's rash guard\""},
+            thought: %{
+              type: "string",
+              description: "What you are reasoning about, in the shopper's words"
+            },
+            append: %{
+              type: "boolean",
+              default: false,
+              description: "Continue the previous thought"
+            },
+            progress:
+              object(
+                %{done: %{type: "integer", minimum: 0}, total: %{type: "integer", minimum: 1}},
+                ["done", "total"]
+              )
+          }),
+        annotations: @state_change
+      },
+      FitzyoWeb.StoreLive.Questions.spec(),
+      %{
+        name: "get_store_state",
+        description:
+          "What the human currently sees: search, filters, selected product/variant, comparison, cart totals, your annotations and plan. Call it after a pause to notice human changes; human actions always win over stale assumptions. Read-only.",
+        input_schema: object(%{}),
+        annotations: @read_only
       },
       %{
         name: "focus_product",
@@ -299,7 +411,8 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
   # ---------------------------------------------------------------- search & filter
 
   defp run("search_products", %{"query" => query} = input, socket) when is_binary(query) do
-    filters = Filters.put_query(socket.assigns.filters, query)
+    base = if input["keep_filters"] == true, do: socket.assigns.filters, else: %Filters{}
+    filters = Filters.put_query(base, query)
     products = State.fetch_results(filters)
 
     result = %{
@@ -348,11 +461,15 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
         |> Enum.map(&match_entry(&1, input, strict?))
         |> Enum.sort_by(& &1.match_score, :desc)
 
+      label = blank_to_nil(input["label"])
+
       result = %{
         strict: strict?,
+        label: label,
         constraints: constraint_map(input),
         matches: Enum.take(matches, limit(input)),
-        total: length(matches)
+        total: length(matches),
+        truncated: length(matches) > limit(input)
       }
 
       summary =
@@ -363,10 +480,79 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
       socket =
         socket
         |> apply_match_filters(input, strict?)
+        |> label_matches(label, matches, strict?)
         |> log(call_label("find_matching_variants", input), summary)
 
       {:ok, result, socket}
     end
+  end
+
+  defp run(
+         "recommend_product",
+         %{"product_id" => id, "label" => label, "reason" => reason} = input,
+         socket
+       )
+       when is_binary(label) and is_binary(reason) do
+    with {:ok, product} <- fetch_product(id),
+         {:ok, variant} <- optional_variant(input["variant_id"], product) do
+      socket =
+        socket
+        |> State.recommend(label, product.id, variant && variant.id, reason)
+        |> State.focus_element("product-#{product.id}")
+        |> log(call_label("recommend_product", input), "#{label}: #{product.name}")
+
+      {:ok,
+       %{success: true, product_id: product.id, variant_id: variant && variant.id, label: label},
+       socket}
+    end
+  end
+
+  defp run("present_plan", %{"title" => title, "groups" => groups} = input, socket)
+       when is_binary(title) and is_list(groups) do
+    with {:ok, plan} <- build_plan(title, input["subtitle"], groups) do
+      needs = plan.groups |> Enum.flat_map(& &1.items) |> Enum.count(&(&1.status == "need"))
+
+      socket =
+        socket
+        |> State.put_plan(plan)
+        |> State.focus_element("agent-plan")
+        |> log(
+          ~s|present_plan("#{title}")|,
+          "#{length(plan.groups)} people, #{needs} items still needed"
+        )
+
+      {:ok, %{success: true, title: title, groups: length(plan.groups)}, socket}
+    end
+  end
+
+  defp run("agent_update", input, socket) do
+    with {:ok, status} <- optional_enum(input["status"], ~w(working done idle), "status"),
+         {:ok, progress} <- optional_progress(input["progress"]) do
+      socket =
+        socket
+        |> maybe_thought(input["thought"], input["append"] == true)
+        |> maybe_status(status, input["message"], progress)
+
+      {:ok, %{success: true, agent: %{status: to_string(socket.assigns.agent.status)}}, socket}
+    end
+  end
+
+  # ask_human is intercepted by FitzyoWeb.StoreLive before the library
+  # dispatches here; this clause only exists so a misrouted call fails clearly.
+  defp run("ask_human", _input, _socket) do
+    error("INVALID_OPERATION", "ask_human must be called through the WebMCP transport")
+  end
+
+  defp run("get_store_state", _input, socket) do
+    socket = State.load_cart(socket)
+    state = Presenter.state(socket.assigns, State.selected_variant(socket))
+
+    {:ok, %{state: state},
+     log(
+       socket,
+       "get_store_state()",
+       "#{state.view} view, #{state.results_count} results, cart #{state.cart.item_count}"
+     )}
   end
 
   defp run("compare_products", %{"product_ids" => ids}, socket) when is_list(ids) do
@@ -461,6 +647,19 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
          quantity: quantity,
          cart: Presenter.cart_totals(cart)
        }, log(socket, call_label("update_cart_item", input), "cart now #{cart.item_count} items")}
+    end
+  end
+
+  defp run("clear_cart", _input, socket) do
+    case Commerce.clear_cart(socket.assigns.cart_id) do
+      :ok ->
+        socket = State.load_cart(socket)
+
+        {:ok, %{success: true, cart: Presenter.cart_totals(socket.assigns.cart)},
+         log(socket, "clear_cart()", "cart emptied")}
+
+      {:error, ash_error} ->
+        error("INVALID_OPERATION", Fitzyo.Errors.message(ash_error))
     end
   end
 
@@ -603,9 +802,78 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
     end
   end
 
+  defp maybe_thought(socket, nil, _append?), do: socket
+  defp maybe_thought(socket, "", _append?), do: socket
+
+  defp maybe_thought(socket, text, append?) when is_binary(text),
+    do: State.log_thought(socket, text, append?)
+
+  defp maybe_thought(socket, _other, _append?), do: socket
+
+  defp maybe_status(socket, nil, nil, nil), do: socket
+
+  defp maybe_status(socket, nil, message, progress),
+    do: State.set_agent_status(socket, :working, message, progress)
+
+  defp maybe_status(socket, status, message, progress),
+    do: State.set_agent_status(socket, String.to_existing_atom(status), message, progress)
+
+  defp optional_enum(nil, _values, _field), do: {:ok, nil}
+
+  defp optional_enum(value, values, field) do
+    case validate_enum(value, values, field) do
+      :ok -> {:ok, String.downcase(value)}
+      err -> err
+    end
+  end
+
+  defp optional_progress(nil), do: {:ok, nil}
+
+  defp optional_progress(%{"done" => done, "total" => total})
+       when is_integer(done) and is_integer(total) and total >= 1 and done >= 0,
+       do: {:ok, %{done: min(done, total), total: total}}
+
+  defp optional_progress(_),
+    do: error("INVALID_OPERATION", "progress must be {done, total} integers")
+
+  defp label_matches(socket, nil, _matches, _strict?), do: socket
+  defp label_matches(socket, _label, _matches, false), do: socket
+  defp label_matches(socket, label, matches, true), do: State.put_matches(socket, label, matches)
+
+  defp build_plan(title, subtitle, groups) do
+    groups =
+      Enum.map(groups, fn
+        %{"label" => label, "items" => items} when is_binary(label) and is_list(items) ->
+          %{
+            label: label,
+            items:
+              Enum.map(items, fn
+                %{"text" => text, "status" => status} = item
+                when is_binary(text) and status in ~w(have need added skipped) ->
+                  %{text: text, status: status, product_id: item["product_id"]}
+
+                _ ->
+                  :invalid
+              end)
+          }
+
+        _ ->
+          :invalid
+      end)
+
+    if groups == [] or Enum.any?(groups, &(&1 == :invalid or :invalid in &1.items)) do
+      error(
+        "INVALID_OPERATION",
+        "present_plan groups need a label and items with text and a status of have, need, added, or skipped"
+      )
+    else
+      {:ok, %{title: title, subtitle: subtitle, groups: groups}}
+    end
+  end
+
   defp constraint_map(input) do
     input
-    |> Map.take(~w(product_id category size color brand fit activity gender price_max))
+    |> Map.take(~w(product_id category size color brand fit activity gender price_max label))
     |> Map.reject(fn {_k, v} -> v in [nil, "", []] end)
   end
 
