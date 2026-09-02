@@ -67,6 +67,9 @@ defmodule Fitzyo.Catalog.Product do
       Search and filter the catalog in one deterministic query.
       Filters use AND semantics across facets and OR semantics within a facet.
       Size and color filters must be satisfied by the same in-stock variant.
+      Exclusions (`exclude_colors`, `exclude_brands`) are AND-NOT: a product
+      only counts when an in-stock variant in a non-excluded color satisfies
+      the size and color filters, and its brand is not excluded.
       """
 
       argument :query, :string
@@ -74,6 +77,8 @@ defmodule Fitzyo.Catalog.Product do
       argument :sizes, {:array, :string}, default: []
       argument :colors, {:array, :string}, default: []
       argument :brands, {:array, :string}, default: []
+      argument :exclude_colors, {:array, :string}, default: []
+      argument :exclude_brands, {:array, :string}, default: []
       argument :fits, {:array, Types.Fit}, default: []
       argument :activities, {:array, :string}, default: []
       argument :gender, Types.Gender

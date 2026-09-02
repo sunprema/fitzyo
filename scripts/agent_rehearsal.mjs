@@ -10,6 +10,12 @@
 // its tools, then calls them. There is no reasoning here: the "plan" below is
 // the outcome an agent would reach from context/FAMILY.md, WARDROBE.md, and
 // TRIP.md. Requires Node 22+ (global fetch/WebSocket) and Google Chrome.
+//
+// What it exercises, in order: the capability gate (a cart write is refused
+// until the shopper grants `cart` with a ceiling), agent-side size derivation
+// from `get_size_guide` (measurements never leave this file), party members
+// with avoid-lists, member-resolved matching, ask_human, propose_cart, and
+// the annotation lifecycle.
 import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 
@@ -19,30 +25,54 @@ const CHROME =
 const OUT = process.env.OUT || "tmp/rehearsal";
 const PORT = 9333;
 
-// What the agent derived from private context. Only these constraints reach
-// the store; names, measurements, and the wardrobe never do.
+// ---------------------------------------------------------------- private context
+// Everything in this block stays in the agent. Only derived constraints reach
+// the store, and `call` below refuses to send any of these keys by accident.
+const MEASUREMENTS = {
+  Dad: { chest: 45, waist: 36, inseam: 32 },
+  Mom: { chest: 35.5, waist: 28.5, hip: 38.5 },
+  Milo: { chest: 30, waist: 25.5 },
+};
+const PRIVATE_KEYS = ["chest", "waist", "hip", "inseam_in", "height", "weight", "age", "name", "measurements"];
+
+// What the agent derived from private context. Sizes marked `derive` are
+// worked out from the store's own size guide below, so the rehearsal shows
+// the pattern on a letter system (tops) and a waist system (bottoms).
 const FAMILY = {
-  Dad: { gender: "men", size: "XL", waist: "36", shoe: "11", colors: ["blue", "black", "navy"],
-         brands: ["Columbia", "Patagonia"], fit: "relaxed" },
-  Mom: { gender: "women", size: "M", shoe: "8", colors: ["navy", "teal", "coral", "white"],
-         brands: ["Patagonia", "Roxy", "Tommy Bahama"], fit: "regular" },
-  Milo: { gender: "boys", size: "L", shoe: "4Y", colors: ["blue", "green", "navy"], brands: [] },
+  Dad: {
+    gender: "men",
+    sizes: { tops: "derive", bottoms: "derive", inseam: "32", shoes: "11", hats: "L/XL" },
+    colors: ["blue", "black", "navy"], exclude_colors: ["red"],
+    brands: ["Columbia", "Patagonia"], fit: "relaxed", budget: 300,
+  },
+  Mom: {
+    gender: "women",
+    sizes: { tops: "M", bottoms: "28", shoes: "8", hats: "S/M" },
+    colors: ["navy", "teal", "coral", "white"], exclude_colors: ["yellow"],
+    brands: ["Patagonia", "Roxy", "Tommy Bahama"], fit: "regular", budget: 250,
+  },
+  Milo: {
+    gender: "boys",
+    sizes: { tops: "L", shoes: "4Y", hats: "S/M" },
+    colors: ["blue", "green", "navy"], exclude_colors: ["pink"], brands: [], budget: 150,
+  },
 };
 
 // Needs = itinerary × activities − wardrobe (see context/*.md), essentials
 // first so the budget protects sun protection over nice-to-haves. `search`
 // is a keyword the agent uses to shortlist products before fit-matching.
+// Sizes are not listed: the store resolves them from the registered member.
 const NEEDS = [
-  { who: "Milo", text: "UPF rash guard", category: "swimwear", size: "L", search: "rash guard", activity: ["swim"], price_max: 40 },
-  { who: "Milo", text: "Sandals", category: "shoes", size: "4Y", search: "sandal", activity: ["beach"], price_max: 50 },
-  { who: "Milo", text: "Sun hat", category: "accessories", size: "S/M", search: "hat", activity: ["beach"], price_max: 20 },
-  { who: "Mom", text: "Long-sleeve rash guard", category: "swimwear", size: "M", search: "rash guard", activity: ["swim"], price_max: 80 },
-  { who: "Dad", text: "2 lightweight travel shirts", category: "shirts", size: "XL", activity: ["travel", "beach"], qty: 2, price_max: 80 },
-  { who: "Dad", text: "1 hiking short", category: "shorts", size: "36", activity: ["hiking"], price_max: 90 },
-  { who: "Dad", text: "New swim trunks", category: "swimwear", size: "36", activity: ["swim"], price_max: 80 },
-  { who: "Mom", text: "Sandals", category: "shoes", size: "8", search: "sandal", brands: [], activity: ["beach"], price_max: 80 },
-  { who: "Mom", text: "1 dinner dress", category: "dresses", size: "M", search: "linen", activity: ["dinner"], price_max: 160 },
-  { who: "Dad", text: "1 linen dinner shirt", category: "shirts", size: "XL", search: "linen", activity: ["dinner"], brands: [], price_max: 130 },
+  { who: "Milo", text: "UPF rash guard", category: "swimwear", search: "rash guard", activity: ["swim"], price_max: 40 },
+  { who: "Milo", text: "Sandals", category: "shoes", search: "sandal", activity: ["beach"], price_max: 50 },
+  { who: "Milo", text: "Sun hat", category: "accessories", search: "hat", activity: ["beach"], price_max: 20 },
+  { who: "Mom", text: "Long-sleeve rash guard", category: "swimwear", search: "rash guard", activity: ["swim"], price_max: 80 },
+  { who: "Dad", text: "2 lightweight travel shirts", category: "shirts", activity: ["travel", "beach"], qty: 2, price_max: 80 },
+  { who: "Dad", text: "1 hiking short", category: "shorts", activity: ["hiking"], price_max: 90 },
+  { who: "Dad", text: "New swim trunks", category: "swimwear", activity: ["swim"], price_max: 80 },
+  { who: "Mom", text: "Sandals", category: "shoes", search: "sandal", brands: [], activity: ["beach"], price_max: 80 },
+  { who: "Mom", text: "1 dinner dress", category: "dresses", search: "linen", activity: ["dinner"], price_max: 160 },
+  { who: "Dad", text: "1 linen dinner shirt", category: "shirts", search: "linen", activity: ["dinner"], brands: [], price_max: 130 },
 ];
 const HAVE = { Dad: ["3 casual shirts", "2 casual shorts"], Mom: ["2 tank tops", "1 casual sundress"], Milo: ["4 t-shirts", "boardshorts"] };
 const BUDGET = 700;
@@ -70,43 +100,88 @@ async function screenshot(name) {
   writeFileSync(`${OUT}/${name}.png`, Buffer.from(data, "base64"));
   console.log(`  📸 ${OUT}/${name}.png`);
 }
-async function call(tool, input = {}) {
+
+// Privacy guard: a store-bound payload must never carry a measurement or a
+// profile field. Invariant 1 of the feature brief, checked on every call.
+function assertDerivedOnly(tool, input) {
+  const json = JSON.stringify(input);
+  for (const key of PRIVATE_KEYS) {
+    if (new RegExp(`"${key}"\\s*:`).test(json)) throw new Error(`privacy guard: ${tool} payload carries "${key}"`);
+  }
+}
+
+// `allowError` returns the structured error instead of throwing, for calls
+// the rehearsal expects to be refused (the capability gate).
+async function call(tool, input = {}, { allowError = false } = {}) {
+  assertDerivedOnly(tool, input);
   const r = await evaluate(
     `navigator.modelContext.tools.get(${JSON.stringify(tool)}).execute(${JSON.stringify(input)})` +
       `.then(r => ({ok: true, r}), e => ({ok: false, e: String(e.message || e)}))`
   );
   const shown = r.ok ? JSON.stringify(r.r) : "ERROR " + r.e;
   console.log(`▶ ${tool}(${JSON.stringify(input)})\n  ${shown.length > 220 ? shown.slice(0, 220) + "…" : shown}`);
-  if (!r.ok) throw new Error(`${tool} failed: ${r.e}`);
+  if (!r.ok) {
+    let parsed = null; try { parsed = JSON.parse(r.e); } catch {}
+    if (allowError && parsed) return { error: parsed };
+    throw new Error(`${tool} failed: ${r.e}`);
+  }
   return r.r;
 }
 
-// ask_human blocks until the shopper acts. In this unattended rehearsal a
-// stand-in "shopper" clicks the first option after a short pause so the
-// hand-back is visible on screen; a real demo leaves this to the person.
-async function askHuman(input) {
-  await evaluate(`window.__ask = {done: false}; navigator.modelContext.tools.get("ask_human").execute(${JSON.stringify(input)})` +
-    `.then(r => { window.__ask = {done: true, r}; }, e => { window.__ask = {done: true, e: String(e.message || e)}; }); true`);
-  console.log(`▶ ask_human(${JSON.stringify(input).slice(0, 160)}…)\n  (waiting for the shopper)`);
+// Blocking calls (ask_human, propose_cart, request_capability) resolve when the
+// shopper acts. In this unattended rehearsal a stand-in "shopper" acts after
+// a short pause so the hand-back is visible on screen; a real demo leaves it
+// to the person.
+const HUMAN_DELAY = process.env.HUMAN_DELAY_MS ? parseInt(process.env.HUMAN_DELAY_MS, 10) : 2500;
+async function blocking(tool, input, slot, shot, act) {
+  assertDerivedOnly(tool, input);
+  await evaluate(`window.${slot} = {done: false}; navigator.modelContext.tools.get(${JSON.stringify(tool)}).execute(${JSON.stringify(input)})` +
+    `.then(r => { window.${slot} = {done: true, r}; }, e => { window.${slot} = {done: true, e: String(e.message || e)}; }); true`);
+  console.log(`▶ ${tool}(${JSON.stringify(input).slice(0, 160)}…)\n  (waiting for the shopper)`);
   await sleep(600);
-  await screenshot("1c-ask-human");
-  await sleep(process.env.HUMAN_DELAY_MS ? parseInt(process.env.HUMAN_DELAY_MS, 10) : 2500);
-  const target = process.env.HUMAN_ANSWER || input.options?.[0]?.id;
-  const selector = `#agent-question [data-option-id="${target}"]`;
-  await evaluate(`document.querySelector(${JSON.stringify(selector)})?.click(); true`);
-  await waitFor(() => evaluate(`window.__ask.done`), "answer");
-  const r = await evaluate(`window.__ask`);
-  console.log(`  ${JSON.stringify(r.r ?? r.e)}`);
-  return r.r ?? { answered: false, reason: "error" };
+  await screenshot(shot);
+  await sleep(HUMAN_DELAY);
+  await act();
+  await waitFor(() => evaluate(`window.${slot}.done`), tool);
+  const r = await evaluate(`window.${slot}`);
+  console.log(`  ${JSON.stringify(r.r ?? r.e).slice(0, 260)}`);
+  return r.r ?? { error: r.e };
 }
 
-function constraints(need) {
-  const p = FAMILY[need.who];
-  return {
-    category: need.category, gender: p.gender, size: need.size,
-    color: p.colors, brand: need.brands ?? p.brands, fit: p.fit, activity: need.activity,
-    price_max: need.price_max, label: need.who,
-  };
+async function askHuman(input) {
+  const target = process.env.HUMAN_ANSWER || input.options?.[0]?.id;
+  const r = await blocking("ask_human", input, "__ask", "1c-ask-human", () =>
+    evaluate(`document.querySelector(${JSON.stringify(`#agent-question [data-option-id="${target}"]`)})?.click(); true`));
+  return r.error ? { answered: false, reason: "error" } : r;
+}
+
+async function requestCapability(input) {
+  // The stand-in shopper reads the request and submits the Allow form (with
+  // the ceiling the agent proposed; a person could lower it first).
+  return blocking("request_capability", input, "__cap", "0-capability-request", () =>
+    evaluate(`document.getElementById("capability-request-form")?.requestSubmit(); true`));
+}
+
+// ---------------------------------------------------------------- size derivation (agent-side)
+// The store serves per-size measurement ranges; the agent matches its private
+// measurements against them locally and sends only the resulting label.
+function deriveSize(guide, m) {
+  const ranges = [["chest", "chest_min", "chest_max"], ["waist", "waist_min", "waist_max"], ["hip", "hip_min", "hip_max"]];
+  let best = null;
+  for (const entry of guide.measurements) {
+    let checks = 0, hits = 0, distance = 0;
+    for (const [key, lo, hi] of ranges) {
+      if (m[key] == null || entry[lo] == null) continue;
+      checks++;
+      const max = entry[hi] ?? entry[lo];
+      if (m[key] >= entry[lo] && m[key] <= max) hits++;
+      else distance += Math.min(Math.abs(m[key] - entry[lo]), Math.abs(m[key] - max));
+    }
+    if (checks === 0) continue;
+    const score = { size: entry.size, exact: hits === checks, distance };
+    if (!best || (score.exact && !best.exact) || (score.exact === best.exact && score.distance < best.distance)) best = score;
+  }
+  return best;
 }
 
 function plan(status) {
@@ -159,8 +234,42 @@ try {
 
   await say("Reading the family's private context");
   await think("Seven days on Maui: beach, a muddy hike, sightseeing, and one nice dinner. Sun is the main risk, so UPF layers first. Budget is $700 for everyone.");
-  await call("get_store_info");
+  const info = await call("get_store_info");
   await call("get_categories");
+
+  // --- Trust first: the cart tier is not granted. Try, get refused, ask.
+  const probe = await call("add_to_cart", { product_id: "prod_1001", variant_id: "prod_1001_blue_xl" }, { allowError: true });
+  if (probe.error?.code !== "CAPABILITY_NOT_GRANTED") throw new Error("expected the cart gate to refuse add_to_cart");
+  await think("The store will not let me touch the cart until you say so. Asking for cart access with a $700 ceiling for the next 30 minutes.");
+  const grant = await requestCapability({
+    capability: "cart",
+    reason: "to assemble the Hawaii basket you asked for, within your $700 budget",
+    scope: { max_spend: BUDGET, expires_ms: 30 * 60 * 1000 },
+  });
+  if (!grant.granted) throw new Error("the shopper did not grant cart access");
+  console.log(`  ↳ cart allowed up to $${grant.scope.max_spend}`);
+
+  // --- Sizes from the store's own guide, matched against private measurements here.
+  await say("Working out Dad's sizes from the store's size guide");
+  const shirtGuideProduct = (await call("search_products", { query: "shirt", limit: 5 })).results.find((p) => p.gender === "men" && p.category === "shirts");
+  const shortGuideProduct = (await call("search_products", { query: "short", limit: 8 })).results.find((p) => p.gender === "men" && p.category === "shorts");
+  const topsGuide = await call("get_size_guide", { product_id: shirtGuideProduct.product_id });
+  const bottomsGuide = await call("get_size_guide", { product_id: shortGuideProduct.product_id });
+  const tops = deriveSize(topsGuide, MEASUREMENTS.Dad);
+  const bottoms = deriveSize(bottomsGuide, MEASUREMENTS.Dad);
+  FAMILY.Dad.sizes.tops = tops.size;
+  FAMILY.Dad.sizes.bottoms = bottoms.size;
+  console.log(`  ↳ derived locally: tops ${tops.size} (${tops.exact ? "exact" : "nearest"}), bottoms ${bottoms.size} (${bottoms.exact ? "exact" : "nearest"}) — measurements never sent`);
+  await think(`Dad is a ${tops.size} top and a ${bottoms.size} waist by this store's guide. Only those labels go to the store.`);
+
+  // --- Register the party as derived constraints, then plan.
+  await say("Registering who I am shopping for");
+  for (const [label, p] of Object.entries(FAMILY)) {
+    await call("register_party_member", { label, gender: p.gender, sizes: p.sizes, colors: p.colors, exclude_colors: p.exclude_colors, brands: p.brands, fit: p.fit, budget: p.budget });
+  }
+  await call("filter_products", {});
+  await sleep(300);
+  await screenshot("1a-party-fits");
   await think("Dad has three casual shirts and two shorts already; he needs quick-dry travel shirts, a hiking short, and new trunks. Mom lacks a rash guard and a dinner dress. Milo has no sandals, hat, or rash guard.");
 
   const status = {};
@@ -172,7 +281,7 @@ try {
   for (const need of NEEDS) {
     await say(`Finding ${need.who}'s ${need.text.toLowerCase()}`);
     const p = FAMILY[need.who];
-    await think(`${need.who}: size ${need.size}, ${p.colors.slice(0, 3).join("/")}${(need.brands ?? p.brands).length ? ", prefers " + (need.brands ?? p.brands).join(" or ") : ""}, under $${need.price_max}.`);
+    await think(`${need.who}: ${p.colors.slice(0, 3).join("/")}, never ${p.exclude_colors.join("/")}${(need.brands ?? p.brands).length ? ", prefers " + (need.brands ?? p.brands).join(" or ") : ""}, under $${need.price_max}. Size comes from the member.`);
     // Shortlist by keyword first when the need is a specific kind of item,
     // then fit-match within the shortlist (spec §40: search → filter → match).
     let shortlist = null;
@@ -180,9 +289,10 @@ try {
       const hits = await call("search_products", { query: need.search, limit: 10 });
       shortlist = hits.results.filter((p) => p.category === need.category).map((p) => p.product_id);
     }
+    const constraints = { member: need.who, category: need.category, activity: need.activity, price_max: need.price_max, ...(need.brands ? { brand: need.brands } : {}) };
     let found = { strict: false, matches: [] };
     for (const product_id of shortlist ?? [null]) {
-      const attempt = await call("find_matching_variants", { ...constraints(need), ...(product_id ? { product_id } : {}), limit: 3 });
+      const attempt = await call("find_matching_variants", { ...constraints, ...(product_id ? { product_id } : {}), limit: 3 });
       if (attempt.strict || (attempt.matches.length && !found.matches.length)) found = attempt;
       if (attempt.strict) break;
     }
@@ -206,10 +316,13 @@ try {
       const choice = answer.answered ? answer.selected[0] : "skip";
       await think(`You chose "${choice}".`);
       if (choice === "add") {
-        const added = await call("add_to_cart", { product_id: best.product_id, variant_id: best.variant_id, quantity: need.qty || 1, label: need.who });
+        const added = await call("add_to_cart", { product_id: best.product_id, variant_id: best.variant_id, quantity: need.qty || 1, label: need.who }, { allowError: true });
+        if (added.error) { console.log(`  ↳ refused: ${added.error.code}`); status[need.text] = "skipped"; done += 1; continue; }
         subtotal = added.cart.subtotal; status[need.text] = "added"; status[`${need.text}:pid`] = best.product_id; done += 1;
         continue;
       }
+      // Skipped: the match badge for it should not linger in the UI.
+      await call("clear_annotations", { label: need.who, product_id: best.product_id });
       status[need.text] = "skipped"; done += 1; console.log(`  ↳ over budget, ${choice === "skip" ? "skipped by the shopper" : "shopper asked for cheaper"}`); continue;
     }
     if (found.matches.length > 1) {
@@ -217,7 +330,13 @@ try {
     }
     await call("recommend_product", { product_id: best.product_id, variant_id: best.variant_id, label: need.who,
       reason: `${need.text}: ${best.brand} in ${best.color}, size ${best.size}${found.strict ? ", every preference met" : ", closest available"}.` });
-    const added = await call("add_to_cart", { product_id: best.product_id, variant_id: best.variant_id, quantity: need.qty || 1, label: need.who });
+    const added = await call("add_to_cart", { product_id: best.product_id, variant_id: best.variant_id, quantity: need.qty || 1, label: need.who }, { allowError: true });
+    if (added.error) {
+      // The ceiling the shopper granted is enforced by the store, not by this script.
+      console.log(`  ↳ refused by the store: ${added.error.code} (${added.error.message})`);
+      await think(`The store refused: ${added.error.message}. Skipping ${need.who}'s ${need.text.toLowerCase()}.`);
+      status[need.text] = "skipped"; done += 1; continue;
+    }
     subtotal = added.cart.subtotal;
     status[need.text] = "added"; status[`${need.text}:pid`] = best.product_id;
     done += 1;
@@ -231,40 +350,37 @@ try {
   await say("Proposing a few extras as one basket");
   await think("Everything essential is in. A sun hat for Dad, water shorts for Mom, and spare shorts for Milo would be nice but push past the budget together; the shopper should pick.");
   const extras = [
-    { who: "Dad", text: "Sun hat", category: "accessories", size: "L/XL", activity: ["beach"], brands: [], price_max: 40 },
-    { who: "Mom", text: "Water shorts", category: "shorts", size: "M", activity: ["swim"], price_max: 70 },
-    { who: "Milo", text: "Spare athletic shorts", category: "shorts", size: "L", activity: ["running"], price_max: 30, optional: true },
+    { who: "Dad", text: "Sun hat", category: "accessories", activity: ["beach"], brands: [], price_max: 40 },
+    { who: "Mom", text: "Water shorts", category: "shorts", activity: ["swim"], price_max: 70 },
+    { who: "Milo", text: "Spare athletic shorts", category: "shorts", activity: ["running"], price_max: 30, optional: true },
   ];
   const lines = [];
   for (const need of extras) {
-    const found = await call("find_matching_variants", { ...constraints(need), limit: 3 });
+    const found = await call("find_matching_variants", { member: need.who, category: need.category, activity: need.activity, price_max: need.price_max, ...(need.brands ? { brand: need.brands } : {}), limit: 3 });
     const best = found.matches[0];
     if (best) lines.push({ variant_id: best.variant_id, label: need.who, reason: `${need.text}: ${best.brand} in ${best.color}`, optional: !!need.optional,
       alternatives: found.matches.slice(1, 3).map((m) => ({ variant_id: m.variant_id, reason: `${m.brand} in ${m.color}, $${m.price}` })) });
   }
   if (lines.length) {
-    await evaluate(`window.__prop = {done: false}; navigator.modelContext.tools.get("propose_cart").execute(${JSON.stringify({ title: "Maui extras — your call", subtitle: "Tick what you want; the budget updates live", budget: { total: BUDGET }, lines })})` +
-      `.then(r => { window.__prop = {done: true, r}; }, e => { window.__prop = {done: true, e: String(e.message || e)}; }); true`);
-    console.log("▶ propose_cart(" + lines.length + " lines, budget $" + BUDGET + ")\n  (waiting for the shopper)");
-    await sleep(700);
-    await screenshot("1d-propose-cart");
-    await sleep(process.env.HUMAN_DELAY_MS ? parseInt(process.env.HUMAN_DELAY_MS, 10) : 2500);
-    // Stand-in shopper: untick from the bottom until the basket fits the budget, then accept.
-    for (let i = 0; i < 5; i++) {
-      const over = await evaluate(`parseFloat(document.getElementById("agent-proposal")?.dataset.overBy || "0")`);
-      if (!(over > 0)) break;
-      await evaluate(`(() => { const ticks = Array.from(document.querySelectorAll("#agent-proposal input[type=checkbox]:checked")); ticks.at(-1)?.click(); })(); true`);
-      await sleep(600);
-    }
-    await evaluate(`document.getElementById("proposal-accept")?.click(); true`);
-    await waitFor(() => evaluate(`window.__prop.done`), "proposal");
-    const r = await evaluate(`window.__prop`);
-    console.log("  " + JSON.stringify(r.r ?? r.e).slice(0, 260));
+    // Per-member budgets come from the registered members; only the total is sent.
+    const r = await blocking("propose_cart", { title: "Maui extras — your call", subtitle: "Tick what you want; the budget updates live", budget: { total: BUDGET }, lines }, "__prop", "1d-propose-cart", async () => {
+      // Stand-in shopper: untick from the bottom until the basket fits the budget and the ceiling, then accept.
+      for (let i = 0; i < 5; i++) {
+        const over = await evaluate(`parseFloat(document.getElementById("agent-proposal")?.dataset.overBy || "0")`);
+        const blocked = await evaluate(`!!document.querySelector("#proposal-accept[disabled]")`);
+        if (!(over > 0) && !blocked) break;
+        await evaluate(`(() => { const ticks = Array.from(document.querySelectorAll("#agent-proposal input[type=checkbox]:checked")); ticks.at(-1)?.click(); })(); true`);
+        await sleep(600);
+      }
+      await evaluate(`document.getElementById("proposal-accept")?.click(); true`);
+    });
+    if (r.error) console.log(`  ↳ proposal error: ${r.error}`);
   }
 
   await call("present_plan", plan(status));
   const cart = await call("get_cart");
-  console.log(`\n🛍  Cart: ${cart.cart.item_count} items, $${cart.cart.subtotal} of $${BUDGET} budget`);
+  const perMember = Object.entries(cart.cart.by_label).map(([who, b]) => `${who} $${b.subtotal}${b.budget ? ` of $${b.budget}` : ""}${b.over_by > 0 ? " (over)" : ""}`).join(", ");
+  console.log(`\n🛍  Cart: ${cart.cart.item_count} items, $${cart.cart.subtotal} of $${BUDGET} budget — ${perMember}`);
   await call("agent_update", { status: "done", message: `Cart ready for review: ${cart.cart.item_count} items, $${cart.cart.subtotal} of $${BUDGET}`, progress: { done: total, total } });
   await call("filter_products", {});
   await sleep(400);
@@ -279,8 +395,10 @@ try {
   await screenshot("4-cart-for-review");
 
   const state = await call("get_store_state");
-  console.log(`\n👀 Human view: ${state.state.view}, ${state.state.annotations.length} annotations, cart open: ${state.state.cart_open}`);
-  console.log("\nDone. The human reviews the cart and approves checkout in the drawer; the agent cannot.");
+  const caps = Object.entries(state.state.capabilities).map(([k, v]) => `${k}: ${v ? (v.max_spend ? `up to $${v.max_spend}` : "yes") : "no"}`).join(", ");
+  console.log(`\n👀 Human view: ${state.state.view}, ${state.state.annotations.length} annotations, ${state.state.members.length} members, cart open: ${state.state.cart_open}`);
+  console.log(`🔐 Capabilities — ${caps}`);
+  console.log(`\nDone. The human reviews the cart and approves checkout in the drawer; the agent cannot. (Store advertises ${info.capability_tiers.cart.length} cart-tier tools behind the gate.)`);
 } catch (e) {
   console.error("\nREHEARSAL FAILED:", e.message);
   process.exitCode = 1;

@@ -15,8 +15,10 @@ defmodule FitzyoWeb.StoreLive do
 
   use FitzyoWeb, :live_view
 
-  # Must be attached before AshWebMcp's own hook: `ask_human` calls are held
-  # open here instead of being answered synchronously by the library.
+  # Must be attached before AshWebMcp's own hook: capability checks refuse
+  # ungranted calls, and `request_capability` / `ask_human` / `propose_cart`
+  # calls are held open here instead of being answered synchronously by the
+  # library. Order matters: the capability gate runs first.
   on_mount {__MODULE__, :intercept_questions}
 
   use AshWebMcp.LiveView,
@@ -26,11 +28,21 @@ defmodule FitzyoWeb.StoreLive do
 
   alias Fitzyo.Commerce
   alias FitzyoWeb.Plugs.CartSession
-  alias FitzyoWeb.StoreLive.{AgentTools, Filters, Proposals, Questions, State}
+
+  alias FitzyoWeb.StoreLive.{
+    AgentTools,
+    Capabilities,
+    Filters,
+    Members,
+    Proposals,
+    Questions,
+    State
+  }
 
   def on_mount(:intercept_questions, _params, _session, socket) do
     {:cont,
      socket
+     |> attach_hook(:fz_capabilities, :handle_event, &Capabilities.intercept/3)
      |> attach_hook(:fz_ask_human, :handle_event, &Questions.intercept/3)
      |> attach_hook(:fz_propose_cart, :handle_event, &Proposals.intercept/3)}
   end
@@ -44,6 +56,7 @@ defmodule FitzyoWeb.StoreLive do
     {:ok,
      socket
      |> State.initial(cart_id)
+     |> Capabilities.initial()
      |> assign(
        size_guide_open: false,
        cart_open: false,
@@ -86,15 +99,18 @@ defmodule FitzyoWeb.StoreLive do
     patch_filters(socket, Filters.put_query(socket.assigns.filters, query))
   end
 
-  def handle_event("toggle_filter", %{"facet" => facet, "value" => value}, socket) do
+  # Facet clicks carry their choice as `phx-value-option`, never `phx-value-value`:
+  # LiveView's client replaces a `value` key with the element's own `value`
+  # property, which is "" for buttons and "on" for checkboxes.
+  def handle_event("toggle_filter", %{"facet" => facet, "option" => value}, socket) do
     patch_filters(socket, Filters.toggle(socket.assigns.filters, facet, value))
   end
 
-  def handle_event("set_category", %{"value" => category}, socket) do
+  def handle_event("set_category", %{"option" => category}, socket) do
     patch_filters(socket, Filters.toggle_category(socket.assigns.filters, category))
   end
 
-  def handle_event("set_gender", %{"value" => gender}, socket) do
+  def handle_event("set_gender", %{"option" => gender}, socket) do
     patch_filters(socket, Filters.toggle_gender(socket.assigns.filters, gender))
   end
 
@@ -103,7 +119,12 @@ defmodule FitzyoWeb.StoreLive do
   end
 
   def handle_event("remove_filter", %{"facet" => facet} = params, socket) do
-    patch_filters(socket, Filters.remove(socket.assigns.filters, facet, params["value"]))
+    patch_filters(socket, Filters.remove(socket.assigns.filters, facet, params["option"]))
+  end
+
+  # "Loosen this constraint": drop a whole facet from the chip group.
+  def handle_event("clear_facet", %{"facet" => facet}, socket) do
+    patch_filters(socket, Filters.clear_facet(socket.assigns.filters, facet))
   end
 
   def handle_event("clear_filters", _params, socket) do
@@ -112,11 +133,11 @@ defmodule FitzyoWeb.StoreLive do
 
   # ---------------------------------------------------------------- events: product detail
 
-  def handle_event("select_color", %{"value" => color}, socket) do
+  def handle_event("select_color", %{"option" => color}, socket) do
     {:noreply, State.select_variant(socket, color, socket.assigns.selected_size)}
   end
 
-  def handle_event("select_size", %{"value" => size}, socket) do
+  def handle_event("select_size", %{"option" => size}, socket) do
     {:noreply, State.select_variant(socket, socket.assigns.selected_color, size)}
   end
 
@@ -151,6 +172,27 @@ defmodule FitzyoWeb.StoreLive do
     {:noreply, State.clear_comparison(socket)}
   end
 
+  # "Compare these": the human puts a set the agent assembled side by side.
+  def handle_event("compare_label", %{"label" => label}, socket) do
+    ids = State.products_for_label(socket.assigns.annotations, label)
+    {:noreply, compare_ids(socket, ids, "Compared #{label}'s matches")}
+  end
+
+  def handle_event("proposal_compare", %{"label" => label}, socket) do
+    case socket.assigns.proposal do
+      nil ->
+        {:noreply, socket}
+
+      proposal ->
+        group = if label == "", do: nil, else: label
+        lines = Enum.filter(proposal.lines, &(&1.label == group))
+        who = if group, do: "#{group}'s", else: "the"
+
+        {:noreply,
+         compare_ids(socket, Proposals.product_ids(lines), "Compared #{who} proposed lines")}
+    end
+  end
+
   # ---------------------------------------------------------------- events: agent annotations (human override)
 
   def handle_event("clear_label", %{"label" => label}, socket) do
@@ -163,6 +205,13 @@ defmodule FitzyoWeb.StoreLive do
 
   def handle_event("dismiss_plan", _params, socket) do
     {:noreply, State.clear_plan(socket)}
+  end
+
+  def handle_event("remove_member", %{"label" => label}, socket) do
+    case State.remove_member(socket, label) do
+      {:ok, socket} -> {:noreply, State.log_human(socket, "Removed #{label} from the party")}
+      {:error, :not_found} -> {:noreply, socket}
+    end
   end
 
   # ---------------------------------------------------------------- events: cart
@@ -248,7 +297,7 @@ defmodule FitzyoWeb.StoreLive do
          checkout_nonce: nil
        )
        |> State.log_human(
-         "Approved and placed order #{confirmation.order_number} · #{items_label(confirmation.item_count)} · #{format_price(confirmation.subtotal)}"
+         "Approved and placed order #{confirmation.order_number} · #{items_label(confirmation.item_count)} · #{format_price(confirmation.subtotal)} · #{provenance_summary(confirmation.by_source)}"
        )
        |> State.load_cart()}
     else
@@ -328,7 +377,36 @@ defmodule FitzyoWeb.StoreLive do
     {:noreply, Proposals.reject(socket)}
   end
 
+  # ---------------------------------------------------------------- events: agent capabilities
+
+  def handle_event("capability_allow", params, socket) do
+    max_spend =
+      case params["max_spend"] do
+        nil -> :requested
+        "" -> nil
+        value -> parse_money(value)
+      end
+
+    {:noreply, Capabilities.allow(socket, params["capability"], max_spend)}
+  end
+
+  def handle_event("capability_deny", _params, socket) do
+    {:noreply, Capabilities.deny(socket)}
+  end
+
+  def handle_event("capability_revoke", %{"capability" => capability}, socket) do
+    {:noreply, Capabilities.revoke(socket, capability)}
+  end
+
   @impl true
+  def handle_info({:fz_capability_timeout, request_id}, socket) do
+    {:noreply, Capabilities.timeout(socket, request_id)}
+  end
+
+  def handle_info({:fz_capability_expired, capability, granted_at}, socket) do
+    {:noreply, Capabilities.expire(socket, capability, granted_at)}
+  end
+
   def handle_info({:fz_proposal_timeout, proposal_id}, socket) do
     {:noreply, Proposals.timeout(socket, proposal_id)}
   end
@@ -353,6 +431,15 @@ defmodule FitzyoWeb.StoreLive do
 
   @hold_ms 600
 
+  defp parse_money(value) when is_binary(value) do
+    case Decimal.parse(String.trim(value)) do
+      {decimal, ""} -> if Decimal.negative?(decimal), do: nil, else: decimal
+      _ -> nil
+    end
+  end
+
+  defp parse_money(_), do: nil
+
   defp items_label(1), do: "1 item"
   defp items_label(count), do: "#{count} items"
 
@@ -369,6 +456,39 @@ defmodule FitzyoWeb.StoreLive do
   end
 
   defp patch_filters(socket, filters), do: {:noreply, State.patch_filters(socket, filters)}
+
+  defp compare_ids(socket, ids, note) when length(ids) >= 2 do
+    products =
+      ids |> Enum.take(4) |> Enum.map(&State.fetch_product/1) |> Enum.flat_map(&elem_ok/1)
+
+    socket
+    |> State.compare(products)
+    |> State.log_human(note)
+    |> State.focus_element("comparison")
+  end
+
+  defp compare_ids(socket, _ids, _note),
+    do: put_flash(socket, :error, "Pick at least two products to compare.")
+
+  defp elem_ok({:ok, product}), do: [product]
+  defp elem_ok(_), do: []
+
+  # "3 yours · 4 agent-added · 2 from a proposal (1 swapped)"
+  def provenance_summary(by_source) do
+    [
+      by_source.human > 0 && "#{by_source.human} yours",
+      by_source.agent > 0 && "#{by_source.agent} agent-added",
+      by_source.proposal > 0 &&
+        "#{by_source.proposal} from a proposal" <>
+          if(by_source.substituted > 0, do: " (#{by_source.substituted} swapped)", else: "")
+    ]
+    |> Enum.reject(&(&1 == false))
+    |> Enum.join(" · ")
+  end
+
+  defp source_badge(:human), do: nil
+  defp source_badge(:agent), do: "agent"
+  defp source_badge(:proposal), do: "accepted"
 
   defp decrement_or_remove(%{quantity: 1} = item), do: {:ok, Commerce.remove_from_cart!(item)}
 
@@ -392,6 +512,16 @@ defmodule FitzyoWeb.StoreLive do
 
   defp chip_label(facets, %{facet: "category", value: id}), do: State.category_name(facets, id)
   defp chip_label(_facets, chip), do: chip.label
+
+  defp group_origin(origins, group) do
+    group.chips
+    |> Enum.map(&Map.get(origins, Filters.chip_key(&1), :human))
+    |> Enum.uniq()
+    |> case do
+      [one] -> to_string(one)
+      _ -> "mixed"
+    end
+  end
 
   defp product_path(id, filters), do: State.product_path(id, filters)
 
@@ -427,6 +557,7 @@ defmodule FitzyoWeb.StoreLive do
     assigns =
       assign(assigns,
         chips: Filters.chips(assigns.filters),
+        chip_groups: Filters.chip_groups(assigns.filters),
         variant: State.selected_variant(%{assigns: assigns})
       )
 
@@ -440,6 +571,7 @@ defmodule FitzyoWeb.StoreLive do
           thought={State.latest_thought(@activity)}
           question={@question}
           proposal={@proposal}
+          capability_request={@capability_request}
         />
         <.selections :if={@cart.items != []} cart={@cart} filters={@filters} />
 
@@ -455,6 +587,7 @@ defmodule FitzyoWeb.StoreLive do
             <%= if @product do %>
               <.product_detail
                 product={@product}
+                members={@members}
                 filters={@filters}
                 selected_color={@selected_color}
                 selected_size={@selected_size}
@@ -469,9 +602,13 @@ defmodule FitzyoWeb.StoreLive do
                 filters={@filters}
                 facets={@facets}
                 chips={@chips}
+                chip_groups={@chip_groups}
+                origins={@filter_origins}
+                excluded_by={@excluded_by}
                 results_count={@results_count}
                 streams={@streams}
                 annotations={@annotations}
+                member_fits={@member_fits}
               />
             <% end %>
           </main>
@@ -485,11 +622,14 @@ defmodule FitzyoWeb.StoreLive do
             plan={@plan}
             question={@question}
             proposal={@proposal}
+            capability_request={@capability_request}
+            capabilities={@capabilities}
+            members={@members}
             cart={@cart}
           />
         </div>
 
-        <.cart_drawer :if={@cart_open} cart={@cart} />
+        <.cart_drawer :if={@cart_open} cart={@cart} members={@members} />
         <.checkout_review :if={@checkout_review} cart={@cart} />
         <.order_confirmation :if={@order_confirmation} confirmation={@order_confirmation} />
       </div>
@@ -584,14 +724,23 @@ defmodule FitzyoWeb.StoreLive do
   attr :thought, :string, default: nil
   attr :question, :map, default: nil
   attr :proposal, :map, default: nil
+  attr :capability_request, :map, default: nil
 
-  # A blocked agent must never look idle: an open question or proposal
-  # overrides the agent's own status with a "waiting for you" state.
+  # A blocked agent must never look idle: an open question, proposal, or
+  # permission request overrides the agent's own status with a "waiting for
+  # you" state.
   defp agent_banner(assigns) do
-    status = if assigns.question || assigns.proposal, do: :waiting, else: assigns.agent.status
+    status =
+      if assigns.question || assigns.proposal || assigns.capability_request,
+        do: :waiting,
+        else: assigns.agent.status
 
     waiting_text =
       cond do
+        assigns.capability_request ->
+          {"#agent-capability-request",
+           "Your agent asks for #{assigns.capability_request.capability} access"}
+
         assigns.question ->
           {"#agent-question", assigns.question.question}
 
@@ -778,15 +927,27 @@ defmodule FitzyoWeb.StoreLive do
                 do: "product",
                 else: "products"}</span>
             </span>
-            <button
-              type="button"
-              phx-click="clear_label"
-              phx-value-label={entry.label}
-              aria-label={"Clear matches for #{entry.label}"}
-              class="text-xs text-faint cursor-pointer hover:text-error"
-            >
-              ×
-            </button>
+            <span class="flex items-center gap-2">
+              <button
+                :if={entry.product_count in 2..4}
+                type="button"
+                id={"compare-label-#{dom_slug(entry.label)}"}
+                phx-click="compare_label"
+                phx-value-label={entry.label}
+                class="text-[11px] font-semibold text-primary cursor-pointer hover:underline"
+              >
+                Compare
+              </button>
+              <button
+                type="button"
+                phx-click="clear_label"
+                phx-value-label={entry.label}
+                aria-label={"Clear matches for #{entry.label}"}
+                class="text-xs text-faint cursor-pointer hover:text-error"
+              >
+                ×
+              </button>
+            </span>
           </li>
         </ul>
       </section>
@@ -798,7 +959,7 @@ defmodule FitzyoWeb.StoreLive do
             type="button"
             id={"filter-category-#{category.id}"}
             phx-click="set_category"
-            phx-value-value={category.id}
+            phx-value-option={category.id}
             data-filter-type="category"
             data-filter-value={category.id}
             aria-pressed={to_string(@filters.category == category.id)}
@@ -823,7 +984,7 @@ defmodule FitzyoWeb.StoreLive do
             type="button"
             id={"filter-gender-#{gender}"}
             phx-click="set_gender"
-            phx-value-value={gender}
+            phx-value-option={gender}
             data-filter-type="gender"
             data-filter-value={gender}
             aria-pressed={to_string(@filters.gender == gender)}
@@ -863,6 +1024,7 @@ defmodule FitzyoWeb.StoreLive do
             name={color.name}
             hex={color.hex}
             selected={color.name in @filters.colors}
+            excluded={color.name in @filters.exclude_colors}
           />
         </div>
       </.facet>
@@ -882,7 +1044,7 @@ defmodule FitzyoWeb.StoreLive do
               checked={brand in @filters.brands}
               phx-click="toggle_filter"
               phx-value-facet="brand"
-              phx-value-value={brand}
+              phx-value-option={brand}
             />
             {brand}
           </label>
@@ -954,9 +1116,13 @@ defmodule FitzyoWeb.StoreLive do
   attr :filters, Filters, required: true
   attr :facets, :map, required: true
   attr :chips, :list, required: true
+  attr :chip_groups, :list, default: []
+  attr :origins, :map, default: %{}
+  attr :excluded_by, :map, default: %{}
   attr :results_count, :integer, required: true
   attr :streams, :map, required: true
   attr :annotations, :map, default: %{}
+  attr :member_fits, :map, default: %{}
 
   defp results(assigns) do
     ~H"""
@@ -972,12 +1138,62 @@ defmodule FitzyoWeb.StoreLive do
 
       <div :if={@chips != []} id="active-filters" class="mt-3 flex flex-wrap items-center gap-2">
         <span class="text-[11px] font-bold uppercase tracking-wider text-faint">Active:</span>
-        <.active_chip
-          :for={chip <- @chips}
-          facet={chip.facet}
-          value={chip.value}
-          label={chip_label(@facets, chip)}
-        />
+        <div
+          :for={group <- @chip_groups}
+          id={"chip-group-#{group.facet}"}
+          data-facet={group.facet}
+          data-origin={group_origin(@origins, group)}
+          data-hiding={@excluded_by[group.facet]}
+          class="flex flex-wrap items-center gap-1 rounded-full border border-base-300 bg-base-100 py-0.5 pl-2.5 pr-1"
+        >
+          <span class="text-[11px] font-bold text-muted">{group.label}</span>
+          <span
+            class={[
+              "rounded-full px-1.5 text-[9px] font-bold uppercase tracking-wide",
+              if(group_origin(@origins, group) == "agent",
+                do: "bg-peach text-error",
+                else: "bg-mint text-secondary dark:bg-base-300"
+              )
+            ]}
+            title={
+              case group_origin(@origins, group) do
+                "agent" -> "Set by your agent"
+                "human" -> "Set by you"
+                _ -> "Set by you and your agent"
+              end
+            }
+          >
+            {case group_origin(@origins, group) do
+              "agent" -> "✦ agent"
+              "human" -> "you"
+              _ -> "mixed"
+            end}
+          </span>
+          <span
+            :if={(@excluded_by[group.facet] || 0) > 0}
+            class="text-[10px] text-faint"
+            title="Products that would show if this constraint were dropped"
+          >
+            hiding {@excluded_by[group.facet]}
+          </span>
+          <.active_chip
+            :for={chip <- group.chips}
+            facet={chip.facet}
+            value={chip.value}
+            label={chip_label(@facets, chip)}
+          />
+          <button
+            :if={length(group.chips) > 1}
+            type="button"
+            phx-click="clear_facet"
+            phx-value-facet={group.facet}
+            aria-label={"Drop the #{group.label} constraint"}
+            title="Loosen this constraint"
+            class="px-1 text-xs text-faint cursor-pointer hover:text-error"
+          >
+            ×
+          </button>
+        </div>
         <button
           type="button"
           id="clear-filters"
@@ -1021,6 +1237,7 @@ defmodule FitzyoWeb.StoreLive do
           product={product}
           href={product_path(product.id, @filters)}
           annotations={State.annotations_for(@annotations, product.id)}
+          fits={Map.get(@member_fits, product.id, [])}
         />
       </div>
     </div>
@@ -1030,6 +1247,7 @@ defmodule FitzyoWeb.StoreLive do
   # ---------------------------------------------------------------- product detail
 
   attr :product, :map, required: true
+  attr :members, :list, default: []
   attr :filters, Filters, required: true
   attr :selected_color, :string, default: nil
   attr :selected_size, :string, default: nil
@@ -1169,7 +1387,7 @@ defmodule FitzyoWeb.StoreLive do
                 type="button"
                 id={"variant-#{variant.id}"}
                 phx-click="select_size"
-                phx-value-value={variant.size}
+                phx-value-option={variant.size}
                 disabled={variant.inventory_quantity == 0}
                 data-product-id={@product.id}
                 data-variant-id={variant.id}
@@ -1193,7 +1411,13 @@ defmodule FitzyoWeb.StoreLive do
               >
                 {variant.size}
                 <span
-                  :for={label <- variant_labels(@annotations, variant.id)}
+                  :for={
+                    label <-
+                      Enum.uniq(
+                        variant_labels(@annotations, variant.id) ++
+                          Members.labels_for_variant(@members, @product, variant)
+                      )
+                  }
                   class="ml-1 rounded-full bg-accent px-1.5 py-px text-[9px] font-bold text-accent-content"
                 >
                   {label}
@@ -1401,6 +1625,7 @@ defmodule FitzyoWeb.StoreLive do
 
   attr :proposal, :map, required: true
   attr :cart, :map, required: true
+  attr :max_spend, :any, default: nil, doc: "the cart ceiling the human granted the agent"
 
   defp agent_proposal(assigns) do
     totals = Proposals.totals(assigns.proposal)
@@ -1408,11 +1633,15 @@ defmodule FitzyoWeb.StoreLive do
     projected =
       Proposals.projected_cart_total(assigns.proposal, totals.total, assigns.cart.subtotal)
 
+    over_ceiling? =
+      assigns.max_spend != nil and Decimal.compare(projected, assigns.max_spend) == :gt
+
     assigns =
       assign(assigns,
         totals: totals,
         groups: Proposals.groups(assigns.proposal),
         projected: projected,
+        over_ceiling?: over_ceiling?,
         cart_over_by:
           if(assigns.proposal.budget[:total],
             do:
@@ -1475,7 +1704,20 @@ defmodule FitzyoWeb.StoreLive do
 
       <div :for={{label, lines} <- @groups} class="mt-3" data-label={label}>
         <div class="mb-1 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-secondary">
-          <span>{label || "For the cart"}</span>
+          <span class="flex items-center gap-2">
+            {label || "For the cart"}
+            <button
+              :if={length(Proposals.product_ids(lines)) >= 2}
+              type="button"
+              id={"proposal-compare-#{dom_slug(label || "cart")}"}
+              phx-click="proposal_compare"
+              phx-value-label={label || ""}
+              class="rounded-full border border-base-300 px-1.5 py-px text-[9px] font-semibold normal-case tracking-normal text-primary cursor-pointer hover:border-primary"
+              title="Show these side by side"
+            >
+              Compare
+            </button>
+          </span>
           <span
             :if={label}
             class={[Decimal.positive?(@totals.over_by_label[label] || Decimal.new(0)) && "text-error"]}
@@ -1606,6 +1848,21 @@ defmodule FitzyoWeb.StoreLive do
         </li>
       </ul>
 
+      <p
+        :if={@max_spend}
+        id="proposal-ceiling"
+        class={[
+          "mt-1 text-[11px]",
+          if(@over_ceiling?, do: "text-error font-semibold", else: "text-muted")
+        ]}
+        data-max-spend={Decimal.to_string(@max_spend, :normal)}
+      >
+        {if @over_ceiling?,
+          do:
+            "Over the #{format_price(@max_spend)} you allowed the agent to put in the cart — untick a line or raise the limit",
+          else: "Agent may fill the cart up to #{format_price(@max_spend)}"}
+      </p>
+
       <div class="mt-3 flex gap-2">
         <button
           type="button"
@@ -1619,10 +1876,10 @@ defmodule FitzyoWeb.StoreLive do
           type="button"
           id="proposal-accept"
           phx-click="proposal_accept"
-          disabled={@totals.selected_count == 0}
+          disabled={@totals.selected_count == 0 or @over_ceiling?}
           class={[
             "flex-1 rounded-xl py-2 text-[12px] font-bold text-primary-content",
-            if(@totals.selected_count == 0,
+            if(@totals.selected_count == 0 or @over_ceiling?,
               do: "bg-base-300 text-muted cursor-not-allowed",
               else: "bg-primary cursor-pointer hover:brightness-95"
             )
@@ -1764,6 +2021,211 @@ defmodule FitzyoWeb.StoreLive do
     """
   end
 
+  # ---------------------------------------------------------------- agent capabilities
+
+  attr :request, :map, required: true
+
+  defp capability_request(assigns) do
+    ~H"""
+    <section
+      id="agent-capability-request"
+      class="fz-fade m-3 rounded-[14px] border-2 border-accent bg-peach p-3.5 text-[#4a3b33]"
+      role="group"
+      aria-labelledby="capability-request-title"
+      data-request-id={@request.id}
+      data-capability={@request.capability}
+    >
+      <div class="mb-1 text-[11px] font-bold uppercase tracking-wider text-error">
+        ✦ Your agent asks for permission
+      </div>
+      <h3 id="capability-request-title" class="font-display text-[15px] font-semibold leading-snug">
+        Allow <span class="capitalize">{@request.capability}</span> access?
+      </h3>
+      <p :if={@request.reason} class="mt-0.5 text-xs text-muted">{@request.reason}</p>
+      <p class="mt-1 text-[11px] text-muted">
+        {capability_blurb(@request.capability)}
+      </p>
+
+      <form
+        id="capability-request-form"
+        phx-submit="capability_allow"
+        class="mt-3 flex flex-col gap-2"
+      >
+        <input type="hidden" name="capability" value={@request.capability} />
+        <label
+          :if={@request.capability == "cart"}
+          class="flex items-center justify-between gap-2 text-[12px] font-semibold"
+        >
+          Spending ceiling
+          <span class="flex items-center gap-1">
+            $
+            <input
+              type="number"
+              name="max_spend"
+              id="capability-max-spend"
+              min="0"
+              step="1"
+              value={@request.max_spend && Decimal.to_string(@request.max_spend, :normal)}
+              placeholder="no limit"
+              class="w-[90px] rounded-lg border border-base-300 bg-base-100 px-2 py-1 text-[13px] font-normal"
+            />
+          </span>
+        </label>
+        <p :if={@request.expires_ms} class="text-[11px] text-muted">
+          Expires automatically after {div(@request.expires_ms, 60_000)} min.
+        </p>
+        <div class="mt-1 flex gap-2">
+          <button
+            type="button"
+            id="capability-deny"
+            phx-click="capability_deny"
+            class="rounded-xl border border-base-300 bg-base-100 px-3 py-2 text-[12px] font-semibold cursor-pointer hover:bg-base-200"
+          >
+            Deny
+          </button>
+          <button
+            type="submit"
+            id="capability-allow"
+            class="flex-1 rounded-xl bg-primary py-2 text-[12px] font-bold text-primary-content cursor-pointer hover:brightness-95"
+          >
+            Allow
+          </button>
+        </div>
+      </form>
+      <p class="mt-2.5 text-[10px] text-faint">
+        You can revoke this at any time below. No permission lets the agent place an order.
+      </p>
+    </section>
+    """
+  end
+
+  attr :capabilities, :map, required: true
+
+  defp capability_list(assigns) do
+    ~H"""
+    <section
+      id="agent-capabilities"
+      class="mx-3 mb-1 rounded-[14px] border border-base-300 bg-base-100 px-3 py-2.5"
+      aria-label="Agent permissions"
+    >
+      <div class="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-muted">
+        Agent permissions
+      </div>
+      <ul class="flex flex-col gap-1">
+        <li
+          :for={tier <- Capabilities.tier_names()}
+          id={"capability-#{tier}"}
+          data-granted={to_string(not is_nil(@capabilities[tier]))}
+          class="flex items-center justify-between gap-2 text-[12px]"
+        >
+          <span class="flex min-w-0 items-center gap-1.5">
+            <span class={[
+              "inline-block size-1.5 shrink-0 rounded-full",
+              if(@capabilities[tier], do: "bg-primary", else: "bg-faint")
+            ]} />
+            <span class="font-semibold capitalize">{tier}</span>
+            <span :if={grant = @capabilities[tier]} class="truncate text-[10px] text-muted">
+              {if grant.by == :default, do: "default", else: "allowed"}{Capabilities.scope_note(grant)}
+            </span>
+            <span :if={is_nil(@capabilities[tier])} class="text-[10px] text-muted">not allowed</span>
+          </span>
+          <%= if @capabilities[tier] do %>
+            <button
+              type="button"
+              phx-click="capability_revoke"
+              phx-value-capability={tier}
+              class="text-[11px] font-semibold text-error cursor-pointer hover:underline"
+            >
+              Revoke
+            </button>
+          <% else %>
+            <button
+              type="button"
+              phx-click="capability_allow"
+              phx-value-capability={tier}
+              phx-value-max_spend=""
+              class="text-[11px] font-semibold text-primary cursor-pointer hover:underline"
+            >
+              Allow
+            </button>
+          <% end %>
+        </li>
+      </ul>
+    </section>
+    """
+  end
+
+  defp capability_blurb("read"), do: "Search, filter, and inspect products and the cart."
+  defp capability_blurb("suggest"), do: "Recommend, plan, narrate, and ask you questions."
+
+  defp capability_blurb("cart"),
+    do: "Add, change, and remove cart lines, and propose baskets. Never checks out."
+
+  # ---------------------------------------------------------------- party
+
+  attr :members, :list, required: true
+  attr :cart, :map, required: true
+
+  defp party(assigns) do
+    assigns =
+      assign(assigns,
+        by_label: FitzyoWeb.StoreLive.Presenter.by_label(assigns.cart.items, assigns.members)
+      )
+
+    ~H"""
+    <section
+      :if={@members != []}
+      id="agent-party"
+      class="fz-fade mx-3 mb-1 rounded-[14px] border border-base-300 bg-base-100 px-3 py-2.5"
+      aria-label="Shopping for"
+    >
+      <div class="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-muted">
+        Shopping for
+      </div>
+      <ul class="flex flex-col gap-1.5">
+        <li
+          :for={member <- @members}
+          id={"party-member-#{dom_slug(member.label)}"}
+          data-label={member.label}
+          class="text-[12px]"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-semibold">{member.label}</span>
+            <span class="flex items-center gap-2">
+              <span
+                :if={spent = @by_label[member.label]}
+                class={[
+                  "text-[11px] tabular-nums",
+                  if(spent.over_by > 0, do: "font-semibold text-error", else: "text-muted")
+                ]}
+                data-subtotal={spent.subtotal}
+              >
+                ${:erlang.float_to_binary(spent.subtotal, decimals: 2)}{if member.budget,
+                  do: " / " <> format_price(member.budget)}
+              </span>
+              <button
+                type="button"
+                phx-click="remove_member"
+                phx-value-label={member.label}
+                aria-label={"Remove #{member.label}"}
+                class="text-xs text-faint cursor-pointer hover:text-error"
+              >
+                ×
+              </button>
+            </span>
+          </div>
+          <div class="truncate text-[10px] text-muted" title={Members.describe(member)}>
+            {Members.describe(member)}
+          </div>
+        </li>
+      </ul>
+      <p class="mt-2 text-[10px] text-faint">
+        Sizes and preferences your agent derived. Nothing else about them reaches this store.
+      </p>
+    </section>
+    """
+  end
+
   # ---------------------------------------------------------------- agent panel
 
   attr :open, :boolean, required: true
@@ -1774,6 +2236,9 @@ defmodule FitzyoWeb.StoreLive do
   attr :plan, :map, default: nil
   attr :question, :map, default: nil
   attr :proposal, :map, default: nil
+  attr :capability_request, :map, default: nil
+  attr :capabilities, :map, required: true
+  attr :members, :list, default: []
   attr :cart, :map, required: true
 
   defp agent_panel(assigns) do
@@ -1784,7 +2249,7 @@ defmodule FitzyoWeb.StoreLive do
         "hidden shrink-0 flex-col border-l border-base-300 bg-base-200 transition-[width] duration-200 lg:flex",
         cond do
           !@open -> "w-8"
-          @proposal || @question -> "w-[340px]"
+          @proposal || @question || @capability_request -> "w-[340px]"
           true -> "w-[260px]"
         end
       ]}
@@ -1803,8 +2268,16 @@ defmodule FitzyoWeb.StoreLive do
             <.icon name="hero-chevron-right-micro" class="size-4" />
           </button>
         </div>
+        <.capability_request :if={@capability_request} request={@capability_request} />
         <.agent_question :if={@question} question={@question} />
-        <.agent_proposal :if={@proposal} proposal={@proposal} cart={@cart} />
+        <.agent_proposal
+          :if={@proposal}
+          proposal={@proposal}
+          cart={@cart}
+          max_spend={get_in(@capabilities, ["cart", :max_spend])}
+        />
+        <.capability_list capabilities={@capabilities} />
+        <.party members={@members} cart={@cart} />
         <section
           :if={@plan}
           id="agent-plan"
@@ -1892,9 +2365,17 @@ defmodule FitzyoWeb.StoreLive do
                 <li class="fz-fade" data-kind="call" data-status={entry.status}>
                   <div class={[
                     "break-words font-mono text-[11px] font-bold",
-                    if(entry.status == :ok, do: "text-secondary", else: "text-error")
+                    case entry.status do
+                      :ok -> "text-secondary"
+                      :warning -> "text-accent"
+                      _ -> "text-error"
+                    end
                   ]}>
-                    {if entry.status == :ok, do: "✓", else: "✗"} {entry.call}
+                    {case entry.status do
+                      :ok -> "✓"
+                      :warning -> "⚠"
+                      _ -> "✗"
+                    end} {entry.call}
                   </div>
                   <div class="mt-0.5 text-[11px] text-muted">{entry.result}</div>
                 </li>
@@ -1934,8 +2415,14 @@ defmodule FitzyoWeb.StoreLive do
   # ---------------------------------------------------------------- cart drawer
 
   attr :cart, :map, required: true
+  attr :members, :list, default: []
 
   defp cart_drawer(assigns) do
+    assigns =
+      assign(assigns,
+        by_label: FitzyoWeb.StoreLive.Presenter.by_label(assigns.cart.items, assigns.members)
+      )
+
     ~H"""
     <div
       id="cart-drawer"
@@ -1984,8 +2471,25 @@ defmodule FitzyoWeb.StoreLive do
             id={"cart-group-#{dom_slug(label || "everyone")}"}
             data-label={label}
           >
-            <h3 class="mb-2 text-[11px] font-bold uppercase tracking-wider text-primary">
-              {label || "Your picks"}
+            <h3 class="mb-2 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-primary">
+              <span>{label || "Your picks"}</span>
+              <span
+                :if={label && @by_label[label]}
+                id={"cart-group-total-#{dom_slug(label)}"}
+                class={[
+                  "normal-case tracking-normal tabular-nums",
+                  if(@by_label[label].over_by > 0, do: "text-error", else: "text-muted")
+                ]}
+                data-over-by={@by_label[label].over_by}
+              >
+                ${:erlang.float_to_binary(@by_label[label].subtotal, decimals: 2)}{if @by_label[label].budget,
+                  do: " / $" <> :erlang.float_to_binary(@by_label[label].budget, decimals: 2)}{if @by_label[
+                                                                                                    label
+                                                                                                  ].over_by >
+                                                                                                    0,
+                                                                                                  do:
+                                                                                                    " over"}
+              </span>
             </h3>
             <ul class="flex flex-col gap-3.5">
               <li
@@ -2183,8 +2687,41 @@ defmodule FitzyoWeb.StoreLive do
           Order <strong class="text-base-content">{@confirmation.order_number}</strong>
           · {@confirmation.item_count} items · {format_price(@confirmation.subtotal)}
         </p>
-        <p id="order-approved-by" class="mb-5 text-[13px] text-muted">
+        <p id="order-approved-by" class="mb-3 text-[13px] text-muted">
           Approved by {@confirmation.approved_by}. This is a demo — no payment was processed.
+        </p>
+        <ul
+          id="order-lines"
+          class="fz-scroll mb-2 max-h-[240px] divide-y divide-base-200 overflow-y-auto text-left text-[12px]"
+        >
+          <li
+            :for={line <- @confirmation.lines}
+            class="flex items-center justify-between gap-2 py-1.5"
+            data-variant-id={line.variant_id}
+            data-source={line.source}
+            data-proposed-variant-id={line.proposed_variant_id}
+          >
+            <span class="min-w-0">
+              <span
+                :if={line.label}
+                class="mr-1 rounded-full bg-accent px-1.5 py-px text-[9px] font-bold text-accent-content"
+              >
+                {line.label}
+              </span>
+              <span class="font-semibold">{line.name}</span>
+              <span class="text-muted"> · {humanize(line.color)} / {line.size} × {line.quantity}</span>
+              <span
+                :if={source_badge(line.source)}
+                class="ml-1 rounded-full bg-mint px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-secondary dark:bg-base-300"
+              >
+                ✦ {source_badge(line.source)}{if line.proposed_variant_id, do: " · swapped"}
+              </span>
+            </span>
+            <span class="shrink-0 font-bold">{format_price(line.line_total)}</span>
+          </li>
+        </ul>
+        <p id="order-provenance" class="mb-5 text-[11px] text-muted">
+          {provenance_summary(@confirmation.by_source)}
         </p>
         <button
           type="button"

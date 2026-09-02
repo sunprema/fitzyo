@@ -14,13 +14,14 @@ defmodule Fitzyo.Commerce.CartItem.Actions.Add do
     quantity = Ash.ActionInput.get_argument(input, :quantity) || 1
     label = Ash.ActionInput.get_argument(input, :label)
     source = Ash.ActionInput.get_argument(input, :source) || :human
+    proposed = Ash.ActionInput.get_argument(input, :proposed_variant_id)
 
     opts = Ash.Context.to_opts(context)
 
     with {:ok, variant} <- fetch_variant(variant_id),
          :ok <- ensure_in_stock(variant, quantity),
          {:ok, existing} <- fetch_existing(cart_id, variant_id, opts) do
-      upsert(existing, cart_id, variant, quantity, label, source, opts)
+      upsert(existing, cart_id, variant, quantity, label, {source, proposed}, opts)
     end
   end
 
@@ -50,7 +51,7 @@ defmodule Fitzyo.Commerce.CartItem.Actions.Add do
     |> Ash.read_one(opts)
   end
 
-  defp upsert(nil, cart_id, variant, quantity, label, source, opts) do
+  defp upsert(nil, cart_id, variant, quantity, label, {source, proposed}, opts) do
     CartItem
     |> Ash.Changeset.for_create(
       :create,
@@ -60,14 +61,15 @@ defmodule Fitzyo.Commerce.CartItem.Actions.Add do
         quantity: quantity,
         label: label,
         unit_price: variant.price,
-        source: source
+        source: source,
+        proposed_variant_id: proposed
       },
       opts
     )
     |> Ash.create()
   end
 
-  defp upsert(existing, _cart_id, variant, quantity, label, _source, opts) do
+  defp upsert(existing, _cart_id, variant, quantity, label, _provenance, opts) do
     if existing.quantity + quantity > variant.inventory_quantity do
       {:error,
        invalid(

@@ -104,6 +104,28 @@ defmodule FitzyoWeb.StoreLiveTest do
       assert has_element?(view, "#product-#{ctx.shirt.id}")
     end
 
+    test "facet clicks survive the browser overriding the value key", ctx do
+      # The LiveView client replaces a `value` key with the element's own
+      # `.value` ("" for buttons, "on" for checkboxes), so payloads look like this.
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      render_click(view, "set_category", %{"option" => ctx.shirts.id, "value" => ""})
+      assert_patch(view, ~p"/?category=#{ctx.shirts.id}")
+
+      render_click(view, "toggle_filter", %{
+        "facet" => "brand",
+        "option" => "Patagonia",
+        "value" => "on"
+      })
+
+      assert_patch(view, ~p"/?brand[]=Patagonia&category=#{ctx.shirts.id}")
+      assert has_element?(view, "#results-empty")
+
+      render_click(view, "toggle_filter", %{"facet" => "brand", "option" => "Patagonia"})
+      assert_patch(view, ~p"/?category=#{ctx.shirts.id}")
+      assert has_element?(view, "#product-#{ctx.shirt.id}")
+    end
+
     test "visiting with filters in the URL applies them", ctx do
       {:ok, view, _html} = live(ctx.conn, ~p"/?brand[]=Patagonia&max=100")
 

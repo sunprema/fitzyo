@@ -108,6 +108,7 @@ defmodule FitzyoWeb.StoreLive.Questions do
         socket
         |> supersede()
         |> FitzyoWeb.StoreLive.Proposals.supersede()
+        |> FitzyoWeb.StoreLive.Capabilities.supersede()
         |> open(Map.put(question, :call_id, call_id))
 
       {:error, message} ->

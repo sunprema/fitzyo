@@ -100,15 +100,39 @@ defmodule Fitzyo.CommerceTest do
     test "returns an order summary, empties the cart, and records the order number", ctx do
       Commerce.add_to_cart!(ctx.cart.id, ctx.blue_xl.id, %{quantity: 2})
 
-      assert {:ok, %{order_number: "FZ-" <> _ = number, item_count: 2, subtotal: subtotal}} =
+      assert {:ok,
+              %{order_number: "FZ-" <> _ = number, item_count: 2, subtotal: subtotal} = order} =
                Commerce.checkout_cart(ctx.cart.id)
 
       assert Decimal.equal?(subtotal, "90.00")
+
+      assert [%{variant_id: variant_id, quantity: 2, source: :human, proposed_variant_id: nil}] =
+               order.lines
+
+      assert variant_id == ctx.blue_xl.id
+      assert order.by_source == %{human: 1, agent: 0, proposal: 0, substituted: 0}
 
       cart = Commerce.get_cart!(ctx.cart.id, load: [:item_count])
       assert cart.item_count == 0
       assert cart.last_order_number == number
       assert cart.checked_out_at
+    end
+
+    test "records who put each line in the cart and what a swapped proposal line replaced", ctx do
+      Commerce.add_to_cart!(ctx.cart.id, ctx.blue_xl.id, %{source: :agent, label: "Dad"})
+
+      Commerce.add_to_cart!(ctx.cart.id, ctx.blue_l.id, %{
+        source: :proposal,
+        proposed_variant_id: "prod_sold_out_l"
+      })
+
+      assert {:ok, order} = Commerce.checkout_cart(ctx.cart.id)
+      assert order.by_source == %{human: 0, agent: 1, proposal: 1, substituted: 1}
+
+      assert Enum.map(order.lines, &{&1.source, &1.proposed_variant_id, &1.label}) == [
+               {:agent, nil, "Dad"},
+               {:proposal, "prod_sold_out_l", nil}
+             ]
     end
 
     test "refuses to check out an empty cart", ctx do

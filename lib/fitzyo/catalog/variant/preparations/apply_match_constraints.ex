@@ -2,7 +2,7 @@ defmodule Fitzyo.Catalog.Variant.Preparations.ApplyMatchConstraints do
   @moduledoc """
   Turns the arguments of `Variant.matching` into a filter.
 
-  Variant-level constraints (size, colors, price, stock) apply directly;
+  Variant-level constraints (sizes, colors, exclusions, price, stock) apply directly;
   product-level constraints (category, brand, fit, activities, gender) are
   applied through the `product` relationship.
   """
@@ -15,9 +15,11 @@ defmodule Fitzyo.Catalog.Variant.Preparations.ApplyMatchConstraints do
     query
     |> filter_product_id(arg(query, :product_id))
     |> filter_category(arg(query, :category))
-    |> filter_size(downcase(arg(query, :size)))
+    |> filter_sizes(sizes(arg(query, :size), arg(query, :sizes)))
     |> filter_colors(downcase_all(arg(query, :colors)))
+    |> exclude_colors(downcase_all(arg(query, :exclude_colors)))
     |> filter_brands(downcase_all(arg(query, :brands)))
+    |> exclude_brands(downcase_all(arg(query, :exclude_brands)))
     |> filter_fit(arg(query, :fit))
     |> filter_activities(downcase_all(arg(query, :activities)))
     |> filter_gender(arg(query, :gender))
@@ -40,19 +42,35 @@ defmodule Fitzyo.Catalog.Variant.Preparations.ApplyMatchConstraints do
   defp filter_category(query, ""), do: query
   defp filter_category(query, cat), do: Ash.Query.filter(query, product.category_id == ^cat)
 
-  defp filter_size(query, nil), do: query
-  defp filter_size(query, ""), do: query
-  defp filter_size(query, size), do: Ash.Query.filter(query, string_downcase(size) == ^size)
+  defp sizes(size, sizes) do
+    [size | List.wrap(sizes)]
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> downcase_all()
+    |> Enum.uniq()
+  end
+
+  defp filter_sizes(query, []), do: query
+  defp filter_sizes(query, sizes), do: Ash.Query.filter(query, string_downcase(size) in ^sizes)
 
   defp filter_colors(query, []), do: query
 
   defp filter_colors(query, colors),
     do: Ash.Query.filter(query, string_downcase(color) in ^colors)
 
+  defp exclude_colors(query, []), do: query
+
+  defp exclude_colors(query, colors),
+    do: Ash.Query.filter(query, string_downcase(color) not in ^colors)
+
   defp filter_brands(query, []), do: query
 
   defp filter_brands(query, brands),
     do: Ash.Query.filter(query, string_downcase(product.brand) in ^brands)
+
+  defp exclude_brands(query, []), do: query
+
+  defp exclude_brands(query, brands),
+    do: Ash.Query.filter(query, string_downcase(product.brand) not in ^brands)
 
   defp filter_fit(query, nil), do: query
   defp filter_fit(query, fit), do: Ash.Query.filter(query, product.fit == ^fit)

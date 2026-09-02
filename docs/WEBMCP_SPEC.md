@@ -217,8 +217,23 @@ UI Navigation
 | `add_to_cart`            | Write      | Add item                             |
 | `remove_from_cart`       | Write      | Remove item                          |
 | `update_cart_item`       | Write      | Change cart item                     |
+| `clear_cart`             | Write      | Empty the cart                       |
+| `recommend_product`      | State      | Agent-written reason on a product    |
+| `clear_annotations`      | State      | Remove the agent's own badges        |
+| `register_party_member`  | State      | Register derived constraints for one person (§62) |
+| `remove_party_member`    | State      | Forget a registered person           |
+| `present_plan`           | State      | Show the agent's plan                |
+| `agent_update`           | State      | Banner, progress, streamed thoughts  |
+| `ask_human`              | Blocking   | Hand a decision to the shopper       |
+| `propose_cart`           | Blocking   | One priced basket, one approval      |
+| `request_capability`     | Blocking   | Earn a tier of tools (§63)           |
+| `get_store_state`        | Read       | What the human sees, incl. overrides |
 | `focus_product`          | UI         | Focus product in UI                  |
 | `focus_filter`           | UI         | Focus filter in UI                   |
+
+Tools are grouped into capability tiers (§63): `read` and `suggest` are
+granted on connect; `cart` (`add_to_cart`, `remove_from_cart`,
+`update_cart_item`, `clear_cart`, `propose_cart`) must be requested.
 
 ---
 
@@ -527,6 +542,19 @@ This is one of the most important WebMCP tools.
         "type": "string"
       }
     },
+    "exclude_color": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "AND-NOT: an excluded color never satisfies color, even when also included"
+    },
+    "exclude_brand": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "fit": {
       "type": "array",
       "items": {
@@ -546,6 +574,10 @@ This is one of the most important WebMCP tools.
     "price_max": {
       "type": "number",
       "minimum": 0
+    },
+    "member": {
+      "type": "string",
+      "description": "A registered party member's label (§62); fills size, colors, exclusions, brands, fit, and gender unless given"
     }
   },
   "additionalProperties": false
@@ -782,6 +814,20 @@ The retailer does not need to know the user's identity.
         "type": "string"
       }
     },
+    "exclude_color": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Hard constraint, never relaxed"
+    },
+    "exclude_brand": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Hard constraint, never relaxed"
+    },
     "fit": {
       "type": "string"
     },
@@ -793,10 +839,20 @@ The retailer does not need to know the user's identity.
     },
     "price_max": {
       "type": "number"
+    },
+    "label": {
+      "type": "string"
+    },
+    "member": {
+      "type": "string",
+      "description": "A registered party member's label (§62): resolves the size for the category, or every size system when no category is given"
     }
   }
 }
 ```
+
+With `member`, the reply carries `resolved_for` and `constraints.sizes`, the
+size labels the store resolved for that person.
 
 ## Example
 
@@ -1181,6 +1237,10 @@ INVALID_CATEGORY
 INVALID_QUANTITY
 CART_ITEM_NOT_FOUND
 INVALID_OPERATION
+CAPABILITY_NOT_GRANTED     the tool's tier has not been granted (§63); carries capability and hint
+CAPABILITY_SCOPE_EXCEEDED  a cart write would pass the granted ceiling; carries max_spend, cart_subtotal, projected_total
+MEMBER_NOT_FOUND           member: names nobody registered (§62)
+PRIVATE_CONTEXT_REJECTED   register_party_member received a field that is not a derived constraint; names the fields
 ```
 
 ---
@@ -1217,13 +1277,20 @@ Conceptually:
 ApplicationState
 ├── searchQuery
 ├── category
-├── filters
-├── results
+├── filters            (each constraint with an origin: agent | human)
+├── results            (with excluded_by: products each facet hides)
 ├── selectedProduct
 ├── selectedVariant
 ├── comparisonProducts
-└── cart
+├── annotations        ("Fits Dad", recommendations)
+├── members            (registered party, §62)
+├── capabilities       (granted tiers and scopes, §63)
+└── cart               (lines carry source: human | agent | proposal)
 ```
+
+`get_store_state` reports all of it, including `filter_origins`,
+`excluded_by`, and `removed_by_human`: the constraints the shopper removed
+that an agent should not re-impose (§64).
 
 WebMCP operations interact with this state.
 
@@ -2231,3 +2298,114 @@ That is the core technical and product thesis of FitzYo.
 > **Your AI knows what fits you. The web doesn't have to.**
 
 This gives your coding agent a clean contract: **`AGENTS.md` explains the product intent → `RETAIL_UX_REQUIREMENTS.md` explains the human/retail experience → `WEBMCP_SPEC.md` defines the machine interface.**
+
+---
+
+# 62. Party Members
+
+`register_party_member` lets an agent register the people it is shopping
+for as **derived constraints**: a label, one size per size system (`tops`,
+`bottoms`, `inseam`, `shoes`, `hats`, `dresses`), colour and brand
+preferences and avoid-lists, a fit, a budget, and a shopper group.
+
+```json
+{"label": "Dad", "gender": "men",
+ "sizes": {"tops": "XL", "bottoms": "36", "inseam": "32", "shoes": "11", "hats": "L/XL"},
+ "colors": ["blue", "black", "navy"], "exclude_colors": ["red"],
+ "brands": ["Columbia", "Patagonia"], "fit": "relaxed", "budget": 300}
+```
+
+The schema has `additionalProperties: false` and the server refuses any
+other field with `PRIVATE_CONTEXT_REJECTED`, naming it. No name, age,
+measurement, or reason is accepted; if a field would embarrass the shopper
+on a retailer's server, it does not belong here.
+
+With a member registered:
+
+- `find_matching_variants` and `filter_products` accept `member: "Dad"` and
+  resolve the size for the category themselves (shirts → tops; shorts and
+  swimwear → bottoms or tops; pants → bottoms, `bottoms x inseam`, or tops;
+  shoes → shoes; accessories → hats). With no category, every size system is
+  sent as one OR list; the same-variant rule keeps it precise.
+- Product cards badge every member a product fits (an in-stock variant in
+  one of their sizes, not an avoided colour, within their shopper group).
+- The cart drawer, `get_cart.by_label`, and proposals show per-member
+  subtotals against per-member budgets; `propose_cart.budget.by_label`
+  defaults from registered members.
+- `remove_party_member` (or the × in the agent panel) forgets the person and
+  clears their badges and matches.
+
+Members live in the session only.
+
+---
+
+# 63. Capability Scopes
+
+An agent does not get the whole surface on connect. Tools belong to tiers:
+
+| Tier      | Tools                                                                                                              | Default     |
+| --------- | ------------------------------------------------------------------------------------------------------------------ | ----------- |
+| `read`    | `get_*`, `search_products`, `filter_products`, `find_matching_variants`, `compare_products`, `get_store_state`     | granted     |
+| `suggest` | `recommend_product`, `clear_annotations`, `present_plan`, `agent_update`, `ask_human`, `focus_*`, party members     | granted     |
+| `cart`    | `add_to_cart`, `remove_from_cart`, `update_cart_item`, `clear_cart`, `propose_cart`                                 | not granted |
+
+A call into an ungranted tier fails with `CAPABILITY_NOT_GRANTED` and
+changes nothing. `request_capability` is a blocking call, like `ask_human`:
+
+```json
+{"capability": "cart", "reason": "to assemble the beach-trip basket you asked for",
+ "scope": {"max_spend": 600, "expires_ms": 1800000}}
+→ {"granted": true, "capability": "cart", "scope": {"max_spend": 600, "expires_at_ms": 1788400000000}}
+→ {"granted": false, "capability": "cart", "reason": "denied" | "timeout" | "superseded"}
+```
+
+The request renders in the agent panel with the ceiling editable; the
+shopper's figure wins. `max_spend` is enforced **server-side at every cart
+write**, including accepting a proposal: a write that would push the whole
+cart past it fails with `CAPABILITY_SCOPE_EXCEEDED` and the current
+figures, and the cart is unchanged. `expires_ms` revokes the tier
+mid-session. The shopper can revoke or pre-authorise any tier from the panel
+at any time, `read` included. `get_store_state.capabilities` and
+`get_store_info.granted_capabilities` report grants, scopes, and expiry.
+Grants, denials, revocations, and expiries appear in the activity feed.
+
+No grant enables checkout: there is no checkout tool to grant (§52).
+
+---
+
+# 64. Constraint Origin and Exclusion Counts
+
+Every active constraint records who set it. Chip groups in the results
+header show the facet, its origin (`✦ agent` or `you`), and `hiding N`: how
+many more products would show if only that facet were dropped. A chip
+removes one value; the group's × drops the whole facet.
+
+`get_store_state` exposes `filter_origins` (per facet: `agent`, `human`, or
+`mixed`), `excluded_by` (per facet counts), and `removed_by_human`: the
+agent-set constraints the shopper removed this session. An agent that
+re-applies one of those, or clears a constraint the shopper set, is written
+to the feed as a warning, so the correction is visible to both sides.
+
+---
+
+# 65. Negative Constraints
+
+`filter_products` and `find_matching_variants` take `exclude_color` and
+`exclude_brand`. They are AND-NOT against the OR-within-facet rule: an
+excluded colour never satisfies `color`, even when it is also included, and
+an excluded brand never appears. For matching they are hard constraints,
+never relaxed in the fallback. They render as `not Red` chips, are
+removable by the human, appear in `filters_applied` and
+`get_store_state.filters` (`exclude_color`, `exclude_brand`), and an
+excluded swatch is struck through in the sidebar.
+
+---
+
+# 66. Order Provenance
+
+Every cart line carries `source` (`human`, `agent`, or `proposal`) and, when
+the shopper swapped a proposed line for an alternative the agent offered,
+`proposed_variant_id`. Checkout returns `lines` with that provenance and a
+`by_source` summary (`human`, `agent`, `proposal`, `substituted`); the
+confirmation lists each line with its badge and the activity feed records
+the split next to the order number.

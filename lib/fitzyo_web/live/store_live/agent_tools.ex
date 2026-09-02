@@ -19,7 +19,7 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
   alias Fitzyo.Catalog
   alias Fitzyo.Catalog.Types
   alias Fitzyo.Commerce
-  alias FitzyoWeb.StoreLive.{Filters, Presenter, State}
+  alias FitzyoWeb.StoreLive.{Capabilities, Filters, Members, Presenter, State}
 
   @store %{
     id: "fitzyo-retail-demo",
@@ -89,11 +89,19 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
             brand: string_array("Brand names"),
             size: string_array("Size labels such as XL, 34, 34x32, 9, 6Y"),
             color: string_array("Color names such as blue, navy, black"),
+            exclude_color:
+              string_array("Colors to avoid (AND-NOT); an excluded color never satisfies color"),
+            exclude_brand: string_array("Brands to avoid (AND-NOT)"),
             fit: %{type: "array", items: %{type: "string", enum: fit_values()}},
             activity: string_array("Activities such as travel, beach, hiking, dinner"),
             gender: %{type: "string", enum: gender_values()},
             price_min: %{type: "number", minimum: 0},
             price_max: %{type: "number", minimum: 0},
+            member: %{
+              type: "string",
+              description:
+                "A registered party member's label; fills size (per category), colors, exclusions, brands, fit, and gender unless given explicitly"
+            },
             limit: %{type: "integer", minimum: 1, maximum: 50}
           }),
         annotations: @state_change
@@ -129,7 +137,9 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
             category: %{type: "string"},
             size: %{type: "string", description: "The size that fits, e.g. XL or 36"},
             color: string_array("Preferred colors (any of)"),
+            exclude_color: string_array("Colors to avoid; a hard constraint, never relaxed"),
             brand: string_array("Preferred brands (any of)"),
+            exclude_brand: string_array("Brands to avoid; a hard constraint, never relaxed"),
             fit: %{type: "string", enum: fit_values()},
             activity: string_array("Intended activities (any of)"),
             gender: %{type: "string", enum: gender_values()},
@@ -138,6 +148,11 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
               type: "string",
               description:
                 "Who these constraints are for, as the shopper says it (e.g. \"Dad\"). When given, matching products are badged \"Fits Dad\" in the store UI. Not stored beyond this session."
+            },
+            member: %{
+              type: "string",
+              description:
+                "A registered party member's label: resolves the right size for the category (or every size system when no category is given) and fills colors, exclusions, brands, fit, gender, and label unless given explicitly"
             },
             limit: %{type: "integer", minimum: 1, maximum: 50}
           }),
@@ -163,7 +178,7 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
       %{
         name: "add_to_cart",
         description:
-          "Add a purchasable variant to the cart. Adding the same variant again increases its quantity. Optional label (e.g. \"Dad\") tags the line for the human. Never checks out.",
+          "Needs the cart capability (request_capability). Add a purchasable variant to the cart. Adding the same variant again increases its quantity. Optional label (e.g. \"Dad\") tags the line for the human. Never checks out.",
         input_schema:
           object(
             %{
@@ -181,14 +196,15 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
       },
       %{
         name: "remove_from_cart",
-        description: "Remove a variant's line from the cart.",
+        description: "Needs the cart capability. Remove a variant's line from the cart.",
         input_schema:
           object(%{product_id: %{type: "string"}, variant_id: %{type: "string"}}, ["variant_id"]),
         annotations: @state_change
       },
       %{
         name: "update_cart_item",
-        description: "Set the quantity of a cart line (1 or more) and optionally its label.",
+        description:
+          "Needs the cart capability. Set the quantity of a cart line (1 or more) and optionally its label.",
         input_schema:
           object(
             %{
@@ -204,7 +220,7 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
       %{
         name: "clear_cart",
         description:
-          "Remove every line from the cart, e.g. to start over after the shopper changes the plan. Prefer remove_from_cart for single lines.",
+          "Needs the cart capability. Remove every line from the cart, e.g. to start over after the shopper changes the plan. Prefer remove_from_cart for single lines.",
         input_schema: object(%{}),
         annotations: %{readOnlyHint: false, destructive?: false, idempotentHint: true}
       },
@@ -227,6 +243,24 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
           ),
         annotations: @state_change
       },
+      %{
+        name: "clear_annotations",
+        description:
+          "Remove your own \"Fits\" matches and recommendations from the store UI, e.g. after the shopper changes the plan or a person drops out. Narrow by label, product_id, or source; omit everything to clear all. The human can also dismiss any card directly.",
+        input_schema:
+          object(%{
+            label: %{type: "string", description: "Only annotations for this person"},
+            product_id: %{type: "string", description: "Only this product"},
+            source: %{
+              type: "string",
+              enum: ~w(match recommendation),
+              description: "Only fit matches or only recommendations"
+            }
+          }),
+        annotations: @state_change
+      },
+      Members.register_spec(),
+      Members.remove_spec(),
       %{
         name: "present_plan",
         description:
@@ -297,6 +331,7 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
       },
       FitzyoWeb.StoreLive.Questions.spec(),
       FitzyoWeb.StoreLive.Proposals.spec(),
+      Capabilities.spec(),
       %{
         name: "get_store_state",
         description:
@@ -353,6 +388,9 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
     result = %{
       store: Map.put(@store, :product_count, product_count),
       capabilities: @capabilities,
+      capability_tiers: Capabilities.tiers(),
+      granted_capabilities:
+        socket.assigns.capabilities |> Enum.filter(&elem(&1, 1)) |> Enum.map(&elem(&1, 0)),
       categories: Enum.map(facets.categories, & &1.id),
       brands: facets.brands,
       colors: Enum.map(facets.colors, & &1.name),
@@ -405,7 +443,7 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
     socket = State.load_cart(socket)
     cart = socket.assigns.cart
 
-    {:ok, %{cart: Presenter.cart(cart)},
+    {:ok, %{cart: Presenter.cart(cart, socket.assigns.members)},
      log(socket, "get_cart()", "#{cart.item_count} items, #{money(cart.subtotal)}")}
   end
 
@@ -425,14 +463,15 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
 
     socket =
       socket
-      |> State.patch_filters(filters)
+      |> State.patch_filters(filters, :agent)
       |> log("search_products(\"#{query}\")", "#{length(products)} products found")
 
     {:ok, result, socket}
   end
 
   defp run("filter_products", input, socket) do
-    with {:ok, filters} <- build_filters(input, socket.assigns.filters.query, socket) do
+    with {:ok, input} <- Members.apply(input, socket.assigns.members),
+         {:ok, filters} <- build_filters(input, socket.assigns.filters.query, socket) do
       products = State.fetch_results(filters)
 
       result = %{
@@ -443,7 +482,7 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
 
       socket =
         socket
-        |> State.patch_filters(filters)
+        |> State.patch_filters(filters, :agent)
         |> log(call_label("filter_products", input), "#{length(products)} products found")
 
       {:ok, result, socket}
@@ -451,7 +490,8 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
   end
 
   defp run("find_matching_variants", input, socket) do
-    with :ok <- validate_category(input["category"], socket),
+    with {:ok, input} <- Members.apply(input, socket.assigns.members),
+         :ok <- validate_category(input["category"], socket),
          :ok <- validate_enum(input["fit"], fit_values(), "fit"),
          :ok <- validate_enum(input["gender"], gender_values(), "gender"),
          {:ok, _} <- validate_product_id(input["product_id"]) do
@@ -467,6 +507,7 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
       result = %{
         strict: strict?,
         label: label,
+        resolved_for: input["resolved_for"],
         constraints: constraint_map(input),
         matches: Enum.take(matches, limit(input)),
         total: length(matches),
@@ -508,6 +549,45 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
     end
   end
 
+  defp run("register_party_member", input, socket) do
+    with {:ok, member} <- Members.build(input),
+         {:ok, socket} <- put_member(socket, member) do
+      {:ok,
+       %{success: true, member: Members.summary(member), members: length(socket.assigns.members)},
+       log(
+         socket,
+         ~s|register_party_member("#{member.label}")|,
+         Members.describe(member)
+       )}
+    end
+  end
+
+  defp run("remove_party_member", %{"label" => label}, socket) when is_binary(label) do
+    case State.remove_member(socket, label) do
+      {:ok, socket} ->
+        {:ok, %{success: true, label: label, members: length(socket.assigns.members)},
+         log(socket, ~s|remove_party_member("#{label}")|, "forgotten")}
+
+      {:error, :not_found} ->
+        error("MEMBER_NOT_FOUND", "No registered member #{inspect(label)}", label: label)
+    end
+  end
+
+  defp run("clear_annotations", input, socket) do
+    with {:ok, source} <- optional_enum(input["source"], ~w(match recommendation), "source") do
+      {socket, removed} =
+        State.clear_annotations(
+          socket,
+          blank_to_nil(input["label"]),
+          blank_to_nil(input["product_id"]),
+          source && String.to_existing_atom(source)
+        )
+
+      {:ok, %{success: true, removed: removed},
+       log(socket, call_label("clear_annotations", input), "#{removed} removed")}
+    end
+  end
+
   defp run("present_plan", %{"title" => title, "groups" => groups} = input, socket)
        when is_binary(title) and is_list(groups) do
     with {:ok, plan} <- build_plan(title, input["subtitle"], groups) do
@@ -540,7 +620,8 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
 
   # ask_human is intercepted by FitzyoWeb.StoreLive before the library
   # dispatches here; this clause only exists so a misrouted call fails clearly.
-  defp run(name, _input, _socket) when name in ["ask_human", "propose_cart"] do
+  defp run(name, _input, _socket)
+       when name in ["ask_human", "propose_cart", "request_capability"] do
     error("INVALID_OPERATION", "#{name} must be called through the WebMCP transport")
   end
 
@@ -579,8 +660,15 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
     quantity = Map.get(input, "quantity", 1)
     label = input["label"]
 
+    socket = State.load_cart(socket)
+
     with {:ok, variant} <- fetch_variant(variant_id, input["product_id"]),
          :ok <- validate_quantity(quantity),
+         :ok <-
+           Capabilities.check_spend(
+             socket,
+             Decimal.add(socket.assigns.cart.subtotal, Decimal.mult(variant.price, quantity))
+           ),
          {:ok, _item} <-
            commerce(
              Commerce.add_to_cart(socket.assigns.cart_id, variant.id, %{
@@ -629,9 +717,18 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
          %{"variant_id" => variant_id, "quantity" => quantity} = input,
          socket
        ) do
+    socket = State.load_cart(socket)
+
     with :ok <- validate_quantity(quantity),
          {:ok, item} <- fetch_cart_item(socket, variant_id),
          :ok <- validate_stock(item.variant, quantity),
+         :ok <-
+           Capabilities.check_spend(
+             socket,
+             socket.assigns.cart.subtotal
+             |> Decimal.sub(item.line_total)
+             |> Decimal.add(Decimal.mult(item.unit_price, quantity))
+           ),
          {:ok, _} <-
            commerce(
              Commerce.set_cart_item_quantity(item, quantity, %{
@@ -721,7 +818,9 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
     hard = %{
       product_id: input["product_id"],
       category: input["category"],
-      size: input["size"],
+      sizes: sizes_in(input),
+      exclude_colors: list(input["exclude_color"]),
+      exclude_brands: list(input["exclude_brand"]),
       gender: input["gender"],
       price_max: decimal(input["price_max"])
     }
@@ -744,7 +843,7 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
 
     checks =
       [
-        {:size, input["size"], fn -> same?(variant.size, input["size"]) end},
+        {:size, sizes_in(input), fn -> any_same?(variant.size, sizes_in(input)) end},
         {:color, list(input["color"]), fn -> any_same?(variant.color, input["color"]) end},
         {:brand, list(input["brand"]), fn -> any_same?(product.brand, input["brand"]) end},
         {:fit, input["fit"], fn -> same?(to_string(product.fit), input["fit"]) end},
@@ -780,7 +879,9 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
       query: socket.assigns.filters.query,
       category: input["category"],
       gender: input["gender"] && String.downcase(input["gender"]),
-      sizes: list(input["size"]),
+      sizes: sizes_in(input),
+      exclude_colors: input["exclude_color"] |> list() |> Enum.map(&String.downcase/1),
+      exclude_brands: list(input["exclude_brand"]),
       price_max: decimal(input["price_max"])
     }
 
@@ -800,7 +901,7 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
     if input["product_id"] do
       socket
     else
-      State.patch_filters(socket, filters)
+      State.patch_filters(socket, filters, :agent)
     end
   end
 
@@ -875,7 +976,9 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
 
   defp constraint_map(input) do
     input
-    |> Map.take(~w(product_id category size color brand fit activity gender price_max label))
+    |> Map.take(
+      ~w(product_id category size sizes color exclude_color brand exclude_brand fit activity gender price_max label)
+    )
     |> Map.reject(fn {_k, v} -> v in [nil, "", []] end)
   end
 
@@ -892,9 +995,11 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
          query: query,
          category: blank_to_nil(input["category"]),
          gender: input["gender"] && String.downcase(input["gender"]),
-         sizes: list(input["size"]),
+         sizes: sizes_in(input),
          colors: input["color"] |> list() |> Enum.map(&String.downcase/1),
          brands: list(input["brand"]),
+         exclude_colors: input["exclude_color"] |> list() |> Enum.map(&String.downcase/1),
+         exclude_brands: list(input["exclude_brand"]),
          fits: list(input["fit"]),
          activities: input["activity"] |> list() |> Enum.map(&String.downcase/1),
          price_min: decimal(input["price_min"]),
@@ -930,19 +1035,15 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
   defp validate_enum(_value, values, field),
     do: error("INVALID_FILTER", "#{field} must be one of #{Enum.join(values, ", ")}")
 
-  defp validate_enum_list(nil, _values, _field), do: :ok
-
-  defp validate_enum_list(values, allowed, field) when is_list(values) do
-    Enum.reduce_while(values, :ok, fn value, :ok ->
+  # A single string (as a member's fit arrives) is accepted as a one-item list.
+  defp validate_enum_list(values, allowed, field) do
+    Enum.reduce_while(List.wrap(values), :ok, fn value, :ok ->
       case validate_enum(value, allowed, field) do
         :ok -> {:cont, :ok}
         err -> {:halt, err}
       end
     end)
   end
-
-  defp validate_enum_list(_values, _allowed, field),
-    do: error("INVALID_FILTER", "#{field} must be an array")
 
   defp validate_price(nil, _field), do: :ok
   defp validate_price(value, _field) when is_number(value) and value >= 0, do: :ok
@@ -1101,6 +1202,16 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
       |> Enum.map_join(", ", fn {k, v} -> "#{k}: #{Jason.encode!(v)}" end)
 
     "#{name}({#{args}})"
+  end
+
+  # `size` (one label) and `sizes` (resolved from a member) form one OR list.
+  defp sizes_in(input), do: Enum.uniq(list(input["size"]) ++ list(input["sizes"]))
+
+  defp put_member(socket, member) do
+    case State.put_member(socket, member) do
+      {:ok, socket} -> {:ok, socket}
+      {:error, message} -> error("INVALID_OPERATION", message)
+    end
   end
 
   defp same?(a, b) when is_binary(a) and is_binary(b),

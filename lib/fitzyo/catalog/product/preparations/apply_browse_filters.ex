@@ -6,12 +6,16 @@ defmodule Fitzyo.Catalog.Product.Preparations.ApplyBrowseFilters do
 
     * AND between facets, OR within a facet.
     * `sizes` and `colors` must be satisfied by the same in-stock variant.
+    * `exclude_colors` and `exclude_brands` are AND-NOT: an excluded color
+      never satisfies the color filter, even when it is also included, and an
+      excluded brand never appears.
     * Text matching is case-insensitive; every whitespace-separated term of
       `query` must appear in the name, brand, or description.
   """
 
   use Ash.Resource.Preparation
   require Ash.Query
+  import Ash.Expr
 
   @impl true
   def prepare(query, _opts, _context) do
@@ -19,12 +23,17 @@ defmodule Fitzyo.Catalog.Product.Preparations.ApplyBrowseFilters do
     |> filter_query(arg(query, :query))
     |> filter_category(arg(query, :category))
     |> filter_brands(downcase_all(arg(query, :brands)))
+    |> exclude_brands(downcase_all(arg(query, :exclude_brands)))
     |> filter_fits(arg(query, :fits))
     |> filter_activities(downcase_all(arg(query, :activities)))
     |> filter_gender(arg(query, :gender))
     |> filter_price_min(arg(query, :price_min))
     |> filter_price_max(arg(query, :price_max))
-    |> filter_variants(downcase_all(arg(query, :sizes)), downcase_all(arg(query, :colors)))
+    |> filter_variants(
+      downcase_all(arg(query, :sizes)),
+      downcase_all(arg(query, :colors)),
+      downcase_all(arg(query, :exclude_colors))
+    )
     |> filter_in_stock(arg(query, :in_stock_only))
   end
 
@@ -58,6 +67,11 @@ defmodule Fitzyo.Catalog.Product.Preparations.ApplyBrowseFilters do
   defp filter_brands(query, brands),
     do: Ash.Query.filter(query, string_downcase(brand) in ^brands)
 
+  defp exclude_brands(query, []), do: query
+
+  defp exclude_brands(query, brands),
+    do: Ash.Query.filter(query, string_downcase(brand) not in ^brands)
+
   defp filter_fits(query, nil), do: query
   defp filter_fits(query, []), do: query
   defp filter_fits(query, fits), do: Ash.Query.filter(query, fit in ^fits)
@@ -86,31 +100,21 @@ defmodule Fitzyo.Catalog.Product.Preparations.ApplyBrowseFilters do
   defp filter_price_max(query, nil), do: query
   defp filter_price_max(query, max), do: Ash.Query.filter(query, price <= ^max)
 
-  defp filter_variants(query, [], []), do: query
+  # One in-stock variant must satisfy every variant-level constraint at once.
+  defp filter_variants(query, [], [], []), do: query
 
-  defp filter_variants(query, sizes, []) do
-    Ash.Query.filter(
-      query,
-      exists(variants, string_downcase(size) in ^sizes and inventory_quantity > 0)
-    )
-  end
+  defp filter_variants(query, sizes, colors, excluded) do
+    conditions =
+      [
+        expr(inventory_quantity > 0),
+        sizes != [] && expr(string_downcase(size) in ^sizes),
+        colors != [] && expr(string_downcase(color) in ^colors),
+        excluded != [] && expr(string_downcase(color) not in ^excluded)
+      ]
+      |> Enum.reject(&(&1 == false))
+      |> Enum.reduce(&expr(^&2 and ^&1))
 
-  defp filter_variants(query, [], colors) do
-    Ash.Query.filter(
-      query,
-      exists(variants, string_downcase(color) in ^colors and inventory_quantity > 0)
-    )
-  end
-
-  defp filter_variants(query, sizes, colors) do
-    Ash.Query.filter(
-      query,
-      exists(
-        variants,
-        string_downcase(size) in ^sizes and string_downcase(color) in ^colors and
-          inventory_quantity > 0
-      )
-    )
+    Ash.Query.filter(query, exists(variants, ^conditions))
   end
 
   defp filter_in_stock(query, true),

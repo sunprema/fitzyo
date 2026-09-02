@@ -25,7 +25,15 @@ defmodule Fitzyo.Commerce.CartItem do
     defaults [:read, :destroy]
 
     create :create do
-      accept [:cart_id, :variant_id, :quantity, :label, :unit_price, :source]
+      accept [
+        :cart_id,
+        :variant_id,
+        :quantity,
+        :label,
+        :unit_price,
+        :source,
+        :proposed_variant_id
+      ]
     end
 
     update :set_quantity do
@@ -61,6 +69,10 @@ defmodule Fitzyo.Commerce.CartItem do
         default :human
       end
 
+      argument :proposed_variant_id, :string do
+        description "For a proposal line the human swapped: the variant the agent originally proposed"
+      end
+
       run Fitzyo.Commerce.CartItem.Actions.Add
     end
   end
@@ -81,6 +93,11 @@ defmodule Fitzyo.Commerce.CartItem do
       description "Provenance: human, agent, or proposal (accepted by the human)"
       allow_nil? false
       default :human
+      public? true
+    end
+
+    attribute :proposed_variant_id, :string do
+      description "Set when the human swapped an agent-proposed line for an alternative the agent offered; records what was proposed"
       public? true
     end
 

@@ -133,16 +133,17 @@ defmodule FitzyoWeb.StoreComponents do
   attr :product, :map, required: true
   attr :href, :string, required: true
   attr :annotations, :list, default: [], doc: "agent annotations for this product (see State)"
+  attr :fits, :list, default: [], doc: "labels of registered party members this product fits"
 
   def product_card(assigns) do
     colors = color_options(assigns.product)
-    labels = assigns.annotations |> Enum.map(& &1.label) |> Enum.uniq()
+    labels = Enum.uniq(Enum.map(assigns.annotations, & &1.label) ++ assigns.fits)
     assigns = assign(assigns, colors: colors, hero: List.first(colors), labels: labels)
 
     ~H"""
     <article
       id={@id}
-      class="fz-fade group flex flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-100 transition hover:-translate-y-0.5 hover:shadow-md"
+      class="fz-fade group relative flex flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-100 transition hover:-translate-y-0.5 hover:shadow-md"
       data-product-id={@product.id}
       data-product-name={@product.name}
       data-brand={@product.brand}
@@ -173,6 +174,33 @@ defmodule FitzyoWeb.StoreComponents do
           </span>
         </.product_art>
       </.link>
+      <div
+        :if={@labels != []}
+        class="absolute right-2 top-2 hidden gap-1 group-hover:flex"
+        aria-label="Dismiss agent matches"
+      >
+        <button
+          :for={label <- @labels}
+          type="button"
+          phx-click="remove_annotation"
+          phx-value-product_id={@product.id}
+          phx-value-label={label}
+          title={"Dismiss for #{label}"}
+          aria-label={"Dismiss match for #{label}"}
+          class="rounded-full bg-base-100/90 px-1.5 text-[10px] font-bold text-muted cursor-pointer hover:text-error"
+        >
+          {label} ×
+        </button>
+      </div>
+      <button
+        type="button"
+        phx-click="compare_add"
+        phx-value-product_id={@product.id}
+        aria-label={"Compare #{@product.name}"}
+        class="absolute bottom-[68px] right-2 hidden rounded-full bg-base-100/90 px-2 py-0.5 text-[10px] font-semibold text-primary shadow-sm cursor-pointer group-hover:block hover:bg-base-100"
+      >
+        + Compare
+      </button>
       <div class="flex flex-1 flex-col gap-1 p-3.5">
         <span class="text-[11px] font-bold uppercase tracking-wide text-primary">{@product.brand}</span>
         <.link patch={@href} class="text-sm font-semibold leading-snug hover:underline">
@@ -223,7 +251,7 @@ defmodule FitzyoWeb.StoreComponents do
       id={@id}
       phx-click="toggle_filter"
       phx-value-facet={@facet}
-      phx-value-value={@value}
+      phx-value-option={@value}
       data-filter-type={@facet}
       data-filter-value={@value}
       aria-pressed={to_string(@selected)}
@@ -246,6 +274,7 @@ defmodule FitzyoWeb.StoreComponents do
   attr :name, :string, required: true
   attr :hex, :string, required: true
   attr :selected, :boolean, default: false
+  attr :excluded, :boolean, default: false, doc: "an active negative constraint hides this color"
   attr :size, :string, default: "size-7"
   attr :event, :string, default: "toggle_filter"
   attr :rest, :global
@@ -257,20 +286,27 @@ defmodule FitzyoWeb.StoreComponents do
       id={@id}
       phx-click={@event}
       phx-value-facet={@facet}
-      phx-value-value={@name}
+      phx-value-option={@name}
       data-filter-type={@facet}
       data-filter-value={@name}
       aria-label={humanize(@name)}
       aria-pressed={to_string(@selected)}
-      title={humanize(@name)}
+      data-excluded={to_string(@excluded)}
+      title={if @excluded, do: "#{humanize(@name)} (excluded)", else: humanize(@name)}
       style={"background: #{@hex}"}
       class={[
-        "rounded-full cursor-pointer transition",
+        "relative rounded-full cursor-pointer transition",
         @size,
-        if(@selected,
-          do: "ring-2 ring-primary ring-offset-2 ring-offset-base-100 border border-primary",
-          else: "border border-base-300 hover:ring-2 hover:ring-primary/40 hover:ring-offset-1"
-        )
+        cond do
+          @selected ->
+            "ring-2 ring-primary ring-offset-2 ring-offset-base-100 border border-primary"
+
+          @excluded ->
+            "border border-error opacity-50 after:absolute after:inset-0 after:m-auto after:h-px after:w-full after:rotate-45 after:bg-error"
+
+          true ->
+            "border border-base-300 hover:ring-2 hover:ring-primary/40 hover:ring-offset-1"
+        end
       ]}
       {@rest}
     />
@@ -288,7 +324,7 @@ defmodule FitzyoWeb.StoreComponents do
       type="button"
       phx-click="remove_filter"
       phx-value-facet={@facet}
-      phx-value-value={@value}
+      phx-value-option={@value}
       class="flex items-center gap-1.5 rounded-full border border-peach-dark bg-peach px-2.5 py-1 text-xs font-semibold text-error cursor-pointer hover:bg-peach-dark/60"
       aria-label={"Remove filter #{@label}"}
     >

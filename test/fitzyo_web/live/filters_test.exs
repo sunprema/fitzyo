@@ -11,6 +11,8 @@ defmodule FitzyoWeb.StoreLive.FiltersTest do
       sizes: ["XL"],
       colors: ["blue", "black"],
       brands: ["Columbia"],
+      exclude_colors: ["red"],
+      exclude_brands: ["Nike"],
       fits: ["relaxed"],
       activities: ["beach"],
       price_min: Decimal.new("20"),
@@ -20,6 +22,7 @@ defmodule FitzyoWeb.StoreLive.FiltersTest do
     params = Filters.to_params(filters)
     assert params["color"] == ["blue", "black"]
     assert params["max"] == "80"
+    assert params["exclude_color"] == ["red"]
     assert params["gender"] == "men"
     assert Filters.from_params(params) == filters
   end
@@ -80,5 +83,32 @@ defmodule FitzyoWeb.StoreLive.FiltersTest do
     assert cleared == %Filters{}
     refute Filters.active?(cleared)
     assert Filters.active?(filters)
+  end
+
+  test "negative constraints are facets with their own chips and can be cleared as a whole" do
+    filters =
+      %Filters{}
+      |> Filters.toggle("exclude_color", "red")
+      |> Filters.toggle("exclude_color", "pink")
+      |> Filters.toggle("exclude_brand", "Nike")
+      |> Filters.toggle("color", "blue")
+
+    assert filters.exclude_colors == ["red", "pink"]
+    assert filters.exclude_brands == ["Nike"]
+
+    labels = filters |> Filters.chips() |> Enum.map(&{&1.facet, &1.label})
+
+    assert labels == [
+             {"color", "Blue"},
+             {"exclude_color", "not Red"},
+             {"exclude_color", "not Pink"},
+             {"exclude_brand", "not Nike"}
+           ]
+
+    assert Filters.remove(filters, "exclude_color", "red").exclude_colors == ["pink"]
+    assert Filters.clear_facet(filters, "exclude_color").exclude_colors == []
+    assert Filters.clear_facet(filters, "color").colors == []
+    assert Filters.clear_facet(filters, "q") == filters
+    assert Filters.from_params(%{"exclude_color" => ["Red"]}).exclude_colors == ["red"]
   end
 end

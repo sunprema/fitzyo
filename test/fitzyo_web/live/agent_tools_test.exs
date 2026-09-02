@@ -15,8 +15,9 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
   @tool_names ~w(get_store_info get_categories search_products filter_products get_product
                  get_variants get_size_guide find_matching_variants compare_products get_cart
                  add_to_cart remove_from_cart update_cart_item clear_cart recommend_product
-                 present_plan agent_update ask_human propose_cart get_store_state focus_product
-                 focus_filter)
+                 clear_annotations register_party_member remove_party_member present_plan
+                 agent_update ask_human propose_cart request_capability get_store_state
+                 focus_product focus_filter)
 
   setup do
     shirts =
@@ -70,6 +71,14 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     %{shirts: shirts, shorts: shorts, columbia: columbia, patagonia: patagonia, short: short}
   end
 
+  # Mounts the store with the cart tier already allowed by the human, the way
+  # most of these tests need it; the capabilities tests mount without it.
+  defp live_granted(conn, path) do
+    {:ok, view, html} = live(conn, path)
+    render_click(view, "capability_allow", %{"capability" => "cart", "max_spend" => ""})
+    {:ok, view, html}
+  end
+
   defp call(view, tool, input \\ %{}) do
     id = System.unique_integer([:positive])
     render_hook(view, "webmcp:call", %{"id" => id, "tool" => tool, "input" => input})
@@ -88,8 +97,8 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
   end
 
   describe "tool surface" do
-    test "registers all fifteen semantic tools with schemas and annotations", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/")
+    test "registers every semantic tool with schemas and annotations", %{conn: conn} do
+      {:ok, view, _html} = live_granted(conn, ~p"/")
 
       assert_push_event(view, "webmcp:register", %{tools: tools})
       assert Enum.map(tools, & &1.name) == @tool_names
@@ -102,11 +111,12 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
       assert Enum.find(tools, &(&1.name == "get_cart")).annotations.readOnlyHint
       refute Enum.find(tools, &(&1.name == "add_to_cart")).annotations.readOnlyHint
       refute Enum.any?(tools, &(&1.annotations[:destructive?] == true))
-      assert length(AgentTools.tools()) == 22
+      assert length(AgentTools.tools()) == length(@tool_names)
+      refute Enum.any?(tools, &(&1.name =~ "checkout"))
     end
 
     test "unknown tools and malformed input return structured errors", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/")
+      {:ok, view, _html} = live_granted(conn, ~p"/")
 
       assert %{status: "error", error: "Unknown tool"} = call(view, "click_button")
 
@@ -117,7 +127,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
 
   describe "discovery" do
     test "get_store_info and get_categories describe the retailer", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       info = ok!(view, "get_store_info")
       assert info.store.name == "FitzYo Retail"
@@ -134,7 +144,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
 
   describe "search and filter" do
     test "search_products sets the search state and returns results", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       result = ok!(view, "search_products", %{"query" => "bahama"})
       assert result.total == 1
@@ -159,7 +169,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "filter_products replaces filters, updates the URL, and validates input", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       result =
         ok!(view, "filter_products", %{
@@ -209,11 +219,128 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
       assert %{"code" => "INVALID_FILTER"} = error!(view, "filter_products", %{"price_max" => -1})
       assert has_element?(view, "#agent-activity li[data-status='error']")
     end
+
+    test "exclude_color and exclude_brand are AND-NOT and show as removable chips", ctx do
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
+
+      # the Columbia shirt comes in blue and sage; excluding both hides it
+      result = ok!(view, "filter_products", %{"exclude_color" => ["Blue", "sage"]})
+      assert Enum.map(result.results, & &1.product_id) == [ctx.patagonia.id, ctx.short.id]
+      assert result.filters_applied["exclude_color"] == ["blue", "sage"]
+      assert has_element?(view, "#active-filters", "not Blue")
+      assert has_element?(view, "#filter-color-blue[data-excluded='true']")
+
+      # include never wins what it also excludes
+      assert ok!(view, "filter_products", %{"color" => ["blue"], "exclude_color" => ["blue"]}).total ==
+               0
+
+      # the human loosens the constraint from the chip
+      view |> element("#active-filters button", "not Blue") |> render_click()
+      assert has_element?(view, "#product-#{ctx.columbia.id}")
+
+      result = ok!(view, "filter_products", %{"exclude_brand" => ["patagonia"]})
+      assert Enum.map(result.results, & &1.product_id) == [ctx.columbia.id]
+      assert has_element?(view, "#active-filters", "not patagonia")
+
+      state = ok!(view, "get_store_state")
+      assert state.state.filters["exclude_brand"] == ["patagonia"]
+    end
+  end
+
+  describe "constraint origin and exclusion counts" do
+    test "chips show who set each constraint and how many products it hides", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      # the human narrows to shirts; the agent adds a color the shopper never chose
+      view |> element("#filter-category-#{ctx.shirts.id}") |> render_click()
+
+      assert has_element?(
+               view,
+               "#chip-group-category[data-origin='human'][data-hiding='1']",
+               "you"
+             )
+
+      ok!(view, "filter_products", %{
+        "category" => ctx.shirts.id,
+        "color" => ["black"],
+        "size" => ["XL"]
+      })
+
+      assert has_element?(view, "#chip-group-category[data-origin='human']")
+
+      assert has_element?(
+               view,
+               "#chip-group-color[data-origin='agent'][data-hiding='1']",
+               "✦ agent"
+             )
+
+      assert has_element?(view, "#chip-group-size[data-origin='agent'][data-hiding='0']")
+
+      state = ok!(view, "get_store_state").state
+
+      assert state.filter_origins == %{
+               "category" => "human",
+               "color" => "agent",
+               "size" => "agent"
+             }
+
+      assert state.excluded_by == %{"category" => 1, "color" => 1, "size" => 0}
+      assert state.removed_by_human == []
+
+      # the human loosens the agent's color constraint from its chip
+      view |> element("#active-filters button", "Black") |> render_click()
+      assert has_element?(view, "#product-#{ctx.columbia.id}")
+
+      assert has_element?(
+               view,
+               "#agent-activity li[data-kind='human']",
+               "Removed the agent's Color: black constraint"
+             )
+
+      state = ok!(view, "get_store_state").state
+      assert state.removed_by_human == [%{facet: "color", value: "black"}]
+      refute Map.has_key?(state.filter_origins, "color")
+
+      # the agent re-imposing it is called out in the feed
+      ok!(view, "filter_products", %{"category" => ctx.shirts.id, "color" => ["black"]})
+
+      assert has_element?(
+               view,
+               "#agent-activity li[data-kind='call'][data-status='warning']",
+               "re-applied a constraint you removed earlier"
+             )
+
+      # and clearing the shopper's own category is visible too
+      ok!(view, "filter_products", %{})
+
+      assert has_element?(
+               view,
+               "#agent-activity li[data-status='warning']",
+               "cleared a constraint you set"
+             )
+    end
+
+    test "a facet with several values can be dropped as one constraint", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      ok!(view, "filter_products", %{"brand" => ["Columbia", "Patagonia"], "size" => ["XL"]})
+      assert has_element?(view, "#chip-group-brand[data-hiding='0']")
+      assert has_element?(view, "#chip-group-size[data-hiding='1']")
+
+      view
+      |> element("#chip-group-brand button[aria-label='Drop the Brand constraint']")
+      |> render_click()
+
+      assert_patch(view, ~p"/?size[]=XL")
+      refute has_element?(view, "#chip-group-brand")
+      assert has_element?(view, "#agent-activity li[data-kind='human']", "Brand: Columbia")
+      assert has_element?(view, "#agent-activity li[data-kind='human']", "Brand: Patagonia")
+    end
   end
 
   describe "product information" do
     test "get_product, get_variants and get_size_guide are read-only and structured", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       %{product: product} = ok!(view, "get_product", %{"product_id" => ctx.columbia.id})
 
@@ -248,7 +375,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
 
   describe "find_matching_variants" do
     test "returns strict matches and narrows the human's view", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       result =
         ok!(view, "find_matching_variants", %{
@@ -274,7 +401,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "falls back to hard constraints and explains what did not match", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       result =
         ok!(view, "find_matching_variants", %{
@@ -295,11 +422,32 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
       assert has_element?(view, "#filter-size-xl[aria-pressed='true']")
       refute has_element?(view, "#filter-brand-columbia input[checked]")
     end
+
+    test "exclusions are hard constraints that survive the relaxed fallback", ctx do
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
+
+      # no shirt is red, so the color preference is relaxed; the blue Columbia
+      # would be the closest match but blue is excluded
+      result =
+        ok!(view, "find_matching_variants", %{
+          "category" => ctx.shirts.id,
+          "size" => "L",
+          "color" => ["red"],
+          "exclude_color" => ["blue"],
+          "exclude_brand" => ["Patagonia"]
+        })
+
+      refute result.strict
+      assert Enum.map(result.matches, & &1.variant_id) == ["#{ctx.columbia.id}_sage_l"]
+      assert result.constraints["exclude_color"] == ["blue"]
+      assert has_element?(view, "#active-filters", "not Blue")
+      assert has_element?(view, "#active-filters", "not Patagonia")
+    end
   end
 
   describe "compare_products" do
     test "shows the comparison to the human, who can clear it", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       result =
         ok!(view, "compare_products", %{"product_ids" => [ctx.columbia.id, ctx.patagonia.id]})
@@ -323,7 +471,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
 
   describe "cart" do
     test "add, inspect, update, and remove with validation", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
       blue_xl = "#{ctx.columbia.id}_blue_xl"
 
       result =
@@ -397,7 +545,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "clear_cart empties everything at once", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       ok!(view, "add_to_cart", %{
         "product_id" => ctx.columbia.id,
@@ -419,7 +567,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
 
     test "the agent's cart is the human's cart", ctx do
       conn = get(ctx.conn, ~p"/")
-      {:ok, view, _html} = live(conn, ~p"/products/#{ctx.short.id}")
+      {:ok, view, _html} = live_granted(conn, ~p"/products/#{ctx.short.id}")
       view |> element("#add-to-cart") |> render_click()
 
       %{cart: cart} = ok!(view, "get_cart")
@@ -430,7 +578,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
 
   describe "agent annotations" do
     test "a labelled match badges products, tags the variant, and the human can clear it", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       result =
         ok!(view, "find_matching_variants", %{
@@ -468,7 +616,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "relaxed matches are reported but not badged as fits", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       result =
         ok!(view, "find_matching_variants", %{
@@ -483,7 +631,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "recommend_product shows an agent-written reason the human can dismiss", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/products/#{ctx.columbia.id}")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/products/#{ctx.columbia.id}")
 
       result =
         ok!(view, "recommend_product", %{
@@ -515,8 +663,107 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
                })
     end
 
+    test "clear_annotations gives the agent a lifecycle for its own cards", ctx do
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
+
+      ok!(view, "find_matching_variants", %{
+        "category" => ctx.shirts.id,
+        "size" => "L",
+        "label" => "Dad"
+      })
+
+      ok!(view, "find_matching_variants", %{
+        "category" => ctx.shorts.id,
+        "size" => "32",
+        "label" => "Milo"
+      })
+
+      ok!(view, "recommend_product", %{
+        "product_id" => ctx.columbia.id,
+        "label" => "Dad",
+        "reason" => "Test"
+      })
+
+      assert has_element?(view, "#fit-label-dad", "2 products")
+      assert has_element?(view, "#fit-label-milo", "1 product")
+
+      # only Dad's recommendation goes; his match stays
+      assert ok!(view, "clear_annotations", %{"label" => "Dad", "source" => "recommendation"}).removed ==
+               1
+
+      assert has_element?(view, "#fit-label-dad", "2 products")
+      state = ok!(view, "get_store_state").state
+      refute Enum.any?(state.annotations, &(&1.source == "recommendation"))
+
+      assert ok!(view, "clear_annotations", %{"product_id" => ctx.short.id}).removed == 1
+      refute has_element?(view, "#fit-label-milo")
+
+      # Dad's shirt matches: blue L and sage L of one shirt, black L of the other
+      assert ok!(view, "clear_annotations", %{}).removed == 3
+      refute has_element?(view, "#fit-labels")
+      assert has_element?(view, "#agent-activity li[data-status='ok']", "clear_annotations")
+
+      assert %{"code" => "INVALID_FILTER"} =
+               error!(view, "clear_annotations", %{"source" => "everything"})
+    end
+
+    test "the human can dismiss a fit badge from the product card", ctx do
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
+
+      ok!(view, "find_matching_variants", %{
+        "category" => ctx.shirts.id,
+        "size" => "L",
+        "label" => "Dad"
+      })
+
+      assert has_element?(view, "#product-#{ctx.columbia.id}[data-fits='Dad']")
+
+      view
+      |> element("#product-#{ctx.columbia.id} button[aria-label='Dismiss match for Dad']")
+      |> render_click()
+
+      refute has_element?(view, "#product-#{ctx.columbia.id}[data-fits]")
+      assert has_element?(view, "#product-#{ctx.patagonia.id}[data-fits='Dad']")
+    end
+
+    test "compare controls put an agent-assembled set side by side as a human action", ctx do
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
+
+      ok!(view, "find_matching_variants", %{
+        "category" => ctx.shirts.id,
+        "size" => "L",
+        "label" => "Dad"
+      })
+
+      view |> element("#compare-label-dad") |> render_click()
+
+      assert has_element?(
+               view,
+               "#comparison[data-product-ids='#{ctx.columbia.id},#{ctx.patagonia.id}']"
+             )
+
+      assert has_element?(view, "#agent-activity li[data-kind='human']", "Compared Dad's matches")
+
+      view |> element("#compare-clear") |> render_click()
+      refute has_element?(view, "#comparison")
+
+      # a product card offers the same for one product at a time
+      view
+      |> element("#product-#{ctx.short.id} button[aria-label='Compare Quandary Short']")
+      |> render_click()
+
+      view
+      |> element("#product-#{ctx.columbia.id} button[aria-label='Compare Bahama Shirt']")
+      |> render_click()
+
+      assert has_element?(
+               view,
+               "#comparison[data-product-ids='#{ctx.short.id},#{ctx.columbia.id}']"
+             )
+    end
+
     test "present_plan renders the agent's plan and validates it", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       result =
         ok!(view, "present_plan", %{
@@ -557,7 +804,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "get_store_state reflects what the human changed", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       ok!(view, "filter_products", %{"category" => ctx.shirts.id, "color" => ["blue"]})
       # the human swaps blue for sage
@@ -574,7 +821,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
 
     test "the cart drawer groups lines by the agent's labels", ctx do
       conn = get(ctx.conn, ~p"/")
-      {:ok, view, _html} = live(conn, ~p"/products/#{ctx.short.id}")
+      {:ok, view, _html} = live_granted(conn, ~p"/products/#{ctx.short.id}")
 
       ok!(view, "add_to_cart", %{
         "product_id" => ctx.columbia.id,
@@ -599,7 +846,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
 
   describe "agent presence" do
     test "any tool call shows the working banner until the agent goes quiet", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
       refute has_element?(view, "#agent-banner")
 
       ok!(view, "get_categories")
@@ -612,7 +859,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "agent_update drives the banner, progress, and a streamed thought feed", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       ok!(view, "agent_update", %{
         "status" => "working",
@@ -664,7 +911,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "selected items appear in the tray as the agent adds them", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
       refute has_element?(view, "#selections")
 
       ok!(view, "add_to_cart", %{
@@ -695,7 +942,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     # says and what "Add to Cart" adds must be the same variant.
     test "opening a recommended product preselects the recommended variant", ctx do
       conn = get(ctx.conn, ~p"/")
-      {:ok, view, _html} = live(conn, ~p"/")
+      {:ok, view, _html} = live_granted(conn, ~p"/")
       sage_l = "#{ctx.columbia.id}_sage_l"
 
       ok!(view, "recommend_product", %{
@@ -719,7 +966,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
 
     test "opening a product already in the cart preselects the cart's variant", ctx do
       conn = get(ctx.conn, ~p"/")
-      {:ok, view, _html} = live(conn, ~p"/")
+      {:ok, view, _html} = live_granted(conn, ~p"/")
       blue_xl = "#{ctx.columbia.id}_blue_xl"
 
       ok!(view, "add_to_cart", %{"product_id" => ctx.columbia.id, "variant_id" => blue_xl})
@@ -731,7 +978,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     test "an annotation wins over a cart line, and a sold-out recommendation falls through",
          ctx do
       conn = get(ctx.conn, ~p"/")
-      {:ok, view, _html} = live(conn, ~p"/")
+      {:ok, view, _html} = live_granted(conn, ~p"/")
       blue_xl = "#{ctx.columbia.id}_blue_xl"
       sage_l = "#{ctx.columbia.id}_sage_l"
       sage_xl = "#{ctx.columbia.id}_sage_xl"
@@ -762,12 +1009,12 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "without annotation or cart line the first in-stock variant is preselected", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/products/#{ctx.columbia.id}")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/products/#{ctx.columbia.id}")
       assert has_element?(view, "#add-to-cart[phx-value-variant_id='#{ctx.columbia.id}_blue_l']")
     end
 
     test "add_to_cart leaves the active filters alone", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       ok!(view, "filter_products", %{"category" => ctx.shirts.id, "color" => ["blue"]})
 
@@ -798,7 +1045,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "renders options, blocks, and resolves with the chosen option", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       id =
         ask(view, %{
@@ -856,7 +1103,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "allow_multiple returns every selected id and free text comes back verbatim", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       id =
         ask(view, %{
@@ -887,7 +1134,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "dismissal, timeout, and supersession resolve as answered: false", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
       options = [%{"id" => "y", "label" => "Yes"}, %{"id" => "n", "label" => "No"}]
 
       id = ask(view, %{"question" => "Go over budget?", "options" => options})
@@ -918,7 +1165,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "invalid questions fail immediately with a structured error", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       id = System.unique_integer([:positive])
 
@@ -953,7 +1200,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
 
     test "renders a priced, grouped basket with live totals and applies only what the shopper accepts",
          ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
       blue_xl = "#{ctx.columbia.id}_blue_xl"
       black_l = "#{ctx.patagonia.id}_black_l"
       short_32 = "#{ctx.short.id}_black_32"
@@ -1086,7 +1333,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
 
     test "alternatives can be swapped, and a sold-out line preselects an offered alternative",
          ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
       blue_xl = "#{ctx.columbia.id}_blue_xl"
       blue_l = "#{ctx.columbia.id}_blue_l"
       sage_xl = "#{ctx.columbia.id}_sage_xl"
@@ -1125,7 +1372,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "replace mode clears the cart only on accept; reject changes nothing", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
       blue_xl = "#{ctx.columbia.id}_blue_xl"
       short_32 = "#{ctx.short.id}_black_32"
 
@@ -1144,9 +1391,118 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
       assert [%{variant_id: ^blue_xl}] = ok!(view, "get_cart").cart.items
     end
 
+    test "a proposal group can be compared, and provenance follows every line to the order",
+         ctx do
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
+      blue_l = "#{ctx.columbia.id}_blue_l"
+      black_l = "#{ctx.patagonia.id}_black_l"
+      short_32 = "#{ctx.short.id}_black_32"
+
+      # one line the human adds, one the agent adds, one proposed and swapped
+      view |> element("#product-#{ctx.short.id} a", "Quandary Short") |> render_click()
+      view |> element("#add-to-cart") |> render_click()
+      view |> element("#back-to-results") |> render_click()
+      ok!(view, "add_to_cart", %{"variant_id" => black_l, "label" => "Dad"})
+
+      id =
+        propose(view, %{
+          "title" => "Shirts",
+          "lines" => [
+            %{
+              "variant_id" => blue_l,
+              "label" => "Dad",
+              "alternatives" => [%{"variant_id" => black_l, "reason" => "cheaper"}]
+            }
+          ]
+        })
+
+      assert has_element?(view, "#agent-proposal [data-label='Dad']")
+      view |> element("#proposal-compare-dad") |> render_click()
+
+      assert has_element?(
+               view,
+               "#comparison[data-product-ids='#{ctx.columbia.id},#{ctx.patagonia.id}']"
+             )
+
+      assert has_element?(
+               view,
+               "#agent-activity li[data-kind='human']",
+               "Compared Dad's proposed lines"
+             )
+
+      swap = "#proposal-swap-0-#{String.replace(black_l, "-", "_")}"
+      view |> element(swap) |> render_click()
+      view |> element("#proposal-accept") |> render_click()
+
+      assert %{accepted: true, substituted: [%{proposed: ^blue_l, chosen: ^black_l}]} =
+               resolved(view, id)
+
+      # the swapped-into line already existed as an agent line, so it keeps that provenance
+      %{cart: cart} = ok!(view, "get_cart")
+
+      assert Enum.map(cart.items, &{&1.variant_id, &1.source}) == [
+               {short_32, "human"},
+               {black_l, "agent"}
+             ]
+
+      id2 =
+        propose(view, %{
+          "lines" => [
+            %{
+              "variant_id" => blue_l,
+              "label" => "Dad",
+              "alternatives" => [%{"variant_id" => black_l}]
+            }
+          ]
+        })
+
+      view |> element(swap) |> render_click()
+      view |> element("#proposal-accept") |> render_click()
+      resolved(view, id2)
+
+      # a fresh proposal line lands with its provenance
+      id3 = propose(view, %{"lines" => [%{"variant_id" => blue_l, "label" => "Dad"}]})
+      view |> element("#proposal-accept") |> render_click()
+      resolved(view, id3)
+
+      # the drawer opened when the human added the short
+      view |> element("#checkout") |> render_click()
+      assert_push_event(view, "fz:checkout_nonce", %{nonce: nonce})
+
+      render_hook(view, "confirm_checkout", %{
+        "nonce" => nonce,
+        "held_ms" => 900,
+        "trusted" => true
+      })
+
+      assert has_element?(
+               view,
+               "#order-lines li[data-variant-id='#{short_32}'][data-source='human']"
+             )
+
+      assert has_element?(
+               view,
+               "#order-lines li[data-variant-id='#{black_l}'][data-source='agent']"
+             )
+
+      assert has_element?(
+               view,
+               "#order-lines li[data-variant-id='#{blue_l}'][data-source='proposal']",
+               "accepted"
+             )
+
+      assert has_element?(
+               view,
+               "#order-provenance",
+               "1 yours · 1 agent-added · 1 from a proposal"
+             )
+
+      assert has_element?(view, "#agent-activity li[data-kind='human']", "1 from a proposal")
+    end
+
     test "timeout and supersession resolve as not accepted; a question supersedes a proposal",
          ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
       lines = [%{"variant_id" => "#{ctx.columbia.id}_blue_xl"}]
 
       id = propose(view, %{"lines" => lines, "timeout_ms" => 5000})
@@ -1173,7 +1529,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "invalid proposals fail immediately and never touch the cart", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       for input <- [
             %{},
@@ -1194,9 +1550,562 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
   end
 
+  describe "party members" do
+    setup ctx do
+      shoes =
+        category_fixture(%{id: "shoes-#{System.unique_integer([:positive])}", name: "Shoes"})
+
+      hats =
+        category_fixture(%{id: "accessories-#{System.unique_integer([:positive])}", name: "Hats"})
+
+      sandal =
+        product_fixture(%{
+          category_id: shoes.id,
+          name: "Hurricane Sandal",
+          brand: "Teva",
+          price: Decimal.new("70"),
+          gender: :men
+        })
+
+      hat =
+        product_fixture(%{
+          category_id: hats.id,
+          name: "Sun Hat",
+          brand: "Columbia",
+          price: Decimal.new("30"),
+          gender: :unisex
+        })
+
+      kid_tee =
+        product_fixture(%{
+          category_id: ctx.shirts.id,
+          name: "Kid Tee",
+          brand: "Columbia",
+          price: Decimal.new("20"),
+          gender: :boys,
+          age_group: :youth
+        })
+
+      variants_fixture(sandal, ["black"], ["10", "11"], 3)
+      variants_fixture(hat, ["sand", "red"], ["S/M", "L/XL"], 3)
+      variants_fixture(kid_tee, ["blue"], ["L", "XL"], 3)
+      %{sandal: sandal, hat: hat, kid_tee: kid_tee}
+    end
+
+    @dad %{
+      "label" => "Dad",
+      "gender" => "men",
+      "sizes" => %{
+        "tops" => "XL",
+        "bottoms" => "34",
+        "inseam" => "32",
+        "shoes" => "11",
+        "hats" => "L/XL"
+      },
+      "colors" => ["Blue", "black"],
+      "exclude_colors" => ["red"],
+      "brands" => ["Columbia", "Patagonia"],
+      "fit" => "relaxed",
+      "budget" => 100
+    }
+
+    test "registration is validated, derived-only, and reflected in state and the panel", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      result = ok!(view, "register_party_member", @dad)
+
+      assert result.member.sizes == %{
+               "tops" => "XL",
+               "bottoms" => "34",
+               "inseam" => "32",
+               "shoes" => "11",
+               "hats" => "L/XL"
+             }
+
+      assert result.member.colors == ["blue", "black"]
+      assert result.members == 1
+
+      assert has_element?(
+               view,
+               "#party-member-dad",
+               "XL · 34x32 · shoes 11 · hat L/XL · blue/black · not red"
+             )
+
+      assert [%{label: "Dad", budget: 100.0, gender: "men"}] =
+               ok!(view, "get_store_state").state.members
+
+      # re-registering replaces; a second person is added
+      ok!(view, "register_party_member", %{"label" => "Dad", "sizes" => %{"tops" => "L"}})
+
+      ok!(view, "register_party_member", %{
+        "label" => "Milo",
+        "gender" => "boys",
+        "sizes" => %{"tops" => "L"}
+      })
+
+      state = ok!(view, "get_store_state").state
+
+      assert Enum.map(state.members, &{&1.label, &1.sizes["tops"]}) == [
+               {"Dad", "L"},
+               {"Milo", "L"}
+             ]
+
+      # private context is refused by name
+      assert %{"code" => "PRIVATE_CONTEXT_REJECTED", "message" => message} =
+               error!(view, "register_party_member", %{
+                 "label" => "Mom",
+                 "age" => 41,
+                 "sizes" => %{"tops" => "M", "chest_in" => 36},
+                 "notes" => "hates polyester"
+               })
+
+      assert message =~ "age"
+      assert message =~ "notes"
+      assert message =~ "sizes.chest_in"
+      refute Enum.any?(ok!(view, "get_store_state").state.members, &(&1.label == "Mom"))
+
+      assert %{"code" => "INVALID_FILTER"} =
+               error!(view, "register_party_member", %{"label" => "Mom", "fit" => "baggy"})
+
+      assert %{"code" => "INVALID_OPERATION"} =
+               error!(view, "register_party_member", %{"label" => " "})
+    end
+
+    test "member: resolves the right size per category across every size system", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      ok!(view, "register_party_member", @dad)
+
+      shirts =
+        ok!(view, "find_matching_variants", %{"member" => "Dad", "category" => ctx.shirts.id})
+
+      assert shirts.strict
+      assert shirts.resolved_for == "Dad"
+      assert shirts.label == "Dad"
+      assert shirts.constraints["sizes"] == ["XL"]
+      assert Enum.map(shirts.matches, & &1.variant_id) == ["#{ctx.columbia.id}_blue_xl"]
+
+      shorts =
+        ok!(view, "find_matching_variants", %{"member" => "Dad", "category" => ctx.shorts.id})
+
+      assert shorts.constraints["sizes"] == ["34", "XL"]
+      assert Enum.map(shorts.matches, & &1.size) == ["34"]
+
+      shoes =
+        ok!(view, "find_matching_variants", %{
+          "member" => "Dad",
+          "category" => ctx.sandal.category_id
+        })
+
+      assert shoes.constraints["sizes"] == ["11"]
+      assert Enum.map(shoes.matches, & &1.variant_id) == ["#{ctx.sandal.id}_black_11"]
+
+      hats =
+        ok!(view, "find_matching_variants", %{
+          "member" => "Dad",
+          "category" => ctx.hat.category_id
+        })
+
+      assert hats.constraints["sizes"] == ["L/XL"]
+      # red is excluded for Dad, so only the sand hat comes back
+      assert Enum.map(hats.matches, & &1.color) == ["sand"]
+
+      # no category: every size system at once, one query instead of a fan-out
+      # a member with sizes only, so no soft preference narrows the strict set
+      ok!(view, "register_party_member", %{
+        "label" => "Uncle",
+        "gender" => "men",
+        "sizes" => @dad["sizes"]
+      })
+
+      everything = ok!(view, "find_matching_variants", %{"member" => "Uncle", "limit" => 50})
+
+      assert Enum.sort(everything.constraints["sizes"]) ==
+               Enum.sort(["XL", "34", "34x32", "11", "L/XL"])
+
+      names = everything.matches |> Enum.map(& &1.name) |> Enum.uniq() |> Enum.sort()
+
+      assert names == [
+               "Bahama Shirt",
+               "Capilene Shirt",
+               "Hurricane Sandal",
+               "Quandary Short",
+               "Sun Hat"
+             ]
+
+      # explicit input wins over the member
+      override =
+        ok!(view, "find_matching_variants", %{
+          "member" => "Dad",
+          "category" => ctx.shirts.id,
+          "size" => "L",
+          "color" => ["sage"]
+        })
+
+      assert override.constraints["size"] == "L"
+      assert Enum.map(override.matches, & &1.variant_id) == ["#{ctx.columbia.id}_sage_l"]
+
+      # filter_products takes a member too, and the sidebar shows the resolved sizes
+      filtered = ok!(view, "filter_products", %{"member" => "Dad", "category" => ctx.shirts.id})
+      assert filtered.filters_applied["size"] == ["XL"]
+      assert filtered.filters_applied["exclude_color"] == ["red"]
+      assert has_element?(view, "#filter-size-xl[aria-pressed='true']")
+
+      assert %{"code" => "MEMBER_NOT_FOUND"} =
+               error!(view, "find_matching_variants", %{"member" => "Grandma"})
+    end
+
+    test "cards badge the members a product fits, and badges clear when a member goes", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      ok!(view, "register_party_member", @dad)
+
+      ok!(view, "register_party_member", %{
+        "label" => "Milo",
+        "gender" => "boys",
+        "sizes" => %{"tops" => "XL"}
+      })
+
+      assert has_element?(view, "#product-#{ctx.columbia.id}[data-fits='Dad']")
+      assert has_element?(view, "#product-#{ctx.sandal.id}[data-fits='Dad']")
+      assert has_element?(view, "#product-#{ctx.kid_tee.id}[data-fits='Milo']")
+      # Dad is a man; the youth tee is not for him even in his letter size
+      refute has_element?(view, "#product-#{ctx.kid_tee.id}[data-fits*='Dad']")
+      # the patagonia shirt only comes in black L/XL: fits Dad
+      assert has_element?(view, "#product-#{ctx.patagonia.id}[data-fits='Dad']")
+
+      view |> element("#product-#{ctx.columbia.id} a", "Bahama Shirt") |> render_click()
+      assert has_element?(view, "#variant-#{ctx.columbia.id}_blue_xl span", "Dad")
+      refute has_element?(view, "#variant-#{ctx.columbia.id}_blue_l span", "Dad")
+      view |> element("#back-to-results") |> render_click()
+
+      # the human removes Milo from the panel
+      view |> element("#party-member-milo button[aria-label='Remove Milo']") |> render_click()
+      refute has_element?(view, "#product-#{ctx.kid_tee.id}[data-fits]")
+
+      assert has_element?(
+               view,
+               "#agent-activity li[data-kind='human']",
+               "Removed Milo from the party"
+             )
+
+      # and the agent forgets Dad, including his matches
+      ok!(view, "find_matching_variants", %{"member" => "Dad", "category" => ctx.shirts.id})
+      assert has_element?(view, "#fit-label-dad")
+      assert ok!(view, "remove_party_member", %{"label" => "Dad"}).members == 0
+      refute has_element?(view, "#fit-labels")
+      refute has_element?(view, "[data-fits]")
+      refute has_element?(view, "#agent-party")
+
+      assert %{"code" => "MEMBER_NOT_FOUND"} =
+               error!(view, "remove_party_member", %{"label" => "Dad"})
+    end
+
+    test "per-member subtotals meet per-member budgets in the cart and in proposals", ctx do
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
+      ok!(view, "register_party_member", @dad)
+      blue_xl = "#{ctx.columbia.id}_blue_xl"
+      short_34 = "#{ctx.short.id}_black_34"
+
+      ok!(view, "add_to_cart", %{"variant_id" => blue_xl, "quantity" => 2, "label" => "Dad"})
+      cart = ok!(view, "get_cart").cart
+      assert cart.by_label == %{"Dad" => %{subtotal: 90.0, budget: 100.0, over_by: 0.0}}
+
+      view |> element("#cart-button") |> render_click()
+      assert has_element?(view, "#cart-group-total-dad[data-over-by='0.0']", "$90.00 / $100.00")
+      assert has_element?(view, "#party-member-dad", "$90.00 / $100.00")
+
+      ok!(view, "add_to_cart", %{"variant_id" => short_34, "label" => "Dad"})
+      assert ok!(view, "get_cart").cart.by_label["Dad"].over_by == 69.0
+      assert has_element?(view, "#cart-group-total-dad[data-over-by='69.0']", "over")
+      view |> element("#cart-button") |> render_click()
+
+      # a proposal without a by_label budget picks up the member's
+      id =
+        propose(view, %{
+          "lines" => [%{"variant_id" => "#{ctx.patagonia.id}_black_xl", "label" => "Dad"}]
+        })
+
+      assert has_element?(view, "#agent-proposal [data-label='Dad']", "/ $100.00")
+      view |> element("#proposal-reject") |> render_click()
+      resolved(view, id)
+
+      # an explicit by_label budget still wins
+      id =
+        propose(view, %{
+          "budget" => %{"by_label" => %{"Dad" => 500}},
+          "lines" => [%{"variant_id" => "#{ctx.patagonia.id}_black_xl", "label" => "Dad"}]
+        })
+
+      assert has_element?(view, "#agent-proposal [data-label='Dad']", "/ $500.00")
+      view |> element("#proposal-reject") |> render_click()
+      resolved(view, id)
+    end
+  end
+
+  describe "capabilities" do
+    defp request(view, input) do
+      id = System.unique_integer([:positive])
+
+      render_hook(view, "webmcp:call", %{
+        "id" => id,
+        "tool" => "request_capability",
+        "input" => input
+      })
+
+      id
+    end
+
+    test "cart tools are refused until the shopper grants the tier", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      blue_xl = "#{ctx.columbia.id}_blue_xl"
+
+      info = ok!(view, "get_store_info")
+      assert info.granted_capabilities == ["read", "suggest"]
+      assert "add_to_cart" in info.capability_tiers["cart"]
+      assert has_element?(view, "#capability-cart[data-granted='false']")
+      assert has_element?(view, "#capability-read[data-granted='true']")
+
+      for {tool, input} <- [
+            {"add_to_cart", %{"variant_id" => blue_xl}},
+            {"remove_from_cart", %{"variant_id" => blue_xl}},
+            {"update_cart_item", %{"variant_id" => blue_xl, "quantity" => 2}},
+            {"clear_cart", %{}},
+            {"propose_cart", %{"lines" => [%{"variant_id" => blue_xl}]}}
+          ] do
+        assert %{
+                 "code" => "CAPABILITY_NOT_GRANTED",
+                 "capability" => "cart",
+                 "hint" => "call request_capability first"
+               } = error!(view, tool, input)
+      end
+
+      assert ok!(view, "get_cart").cart.items == []
+      refute has_element?(view, "#agent-proposal")
+
+      assert has_element?(
+               view,
+               "#agent-activity li[data-status='error']",
+               "blocked: cart capability"
+             )
+
+      # read and suggest work without asking
+      assert ok!(view, "search_products", %{"query" => "shirt"}).total == 2
+      assert ok!(view, "agent_update", %{"status" => "working"}).success
+    end
+
+    test "request_capability blocks until the shopper allows, whose ceiling wins", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      blue_xl = "#{ctx.columbia.id}_blue_xl"
+
+      id =
+        request(view, %{
+          "capability" => "cart",
+          "reason" => "to assemble the beach-trip basket you asked for",
+          "scope" => %{"max_spend" => 600, "expires_ms" => 1_800_000}
+        })
+
+      refute_push_event(view, "webmcp:result", %{id: ^id})
+
+      assert has_element?(
+               view,
+               "#agent-capability-request[data-capability='cart']",
+               "beach-trip basket"
+             )
+
+      assert has_element?(view, "#agent-banner[data-status='waiting']", "asks for cart access")
+      assert has_element?(view, "#capability-max-spend[value='600']")
+      state = ok!(view, "get_store_state").state
+      assert state.pending_capability_request.capability == "cart"
+      assert state.pending_capability_request.max_spend == 600.0
+      assert state.capabilities["cart"] == nil
+
+      # the shopper lowers the ceiling before allowing
+      view
+      |> form("#capability-request-form", %{"max_spend" => "100"})
+      |> render_submit()
+
+      assert_push_event(view, "webmcp:result", %{id: ^id, status: "ok", result: result})
+      assert result.granted
+      assert result.capability == "cart"
+      assert result.scope.max_spend == 100.0
+      assert is_integer(result.scope.expires_at_ms)
+      refute has_element?(view, "#agent-capability-request")
+      assert has_element?(view, "#capability-cart[data-granted='true']", "up to $100")
+      assert has_element?(view, "#agent-activity li[data-kind='human']", "Allowed cart access")
+
+      state = ok!(view, "get_store_state").state
+      assert state.capabilities["cart"].max_spend == 100.0
+      assert state.capabilities["cart"].by == "human"
+      assert state.capabilities["read"].by == "default"
+
+      # the ceiling is enforced at write time and the cart is untouched
+      assert ok!(view, "add_to_cart", %{"variant_id" => blue_xl, "quantity" => 2}).cart.subtotal ==
+               90.0
+
+      assert %{
+               "code" => "CAPABILITY_SCOPE_EXCEEDED",
+               "max_spend" => 100.0,
+               "cart_subtotal" => 90.0,
+               "projected_total" => 135.0
+             } = error!(view, "add_to_cart", %{"variant_id" => blue_xl})
+
+      assert %{"code" => "CAPABILITY_SCOPE_EXCEEDED"} =
+               error!(view, "update_cart_item", %{"variant_id" => blue_xl, "quantity" => 3})
+
+      assert ok!(view, "get_cart").cart.subtotal == 90.0
+      # lowering spend is always fine
+      assert ok!(view, "update_cart_item", %{"variant_id" => blue_xl, "quantity" => 1}).cart.subtotal ==
+               45.0
+
+      # a request already covered by the grant (smaller ceiling, shorter expiry) is answered at once
+      id2 =
+        request(view, %{
+          "capability" => "cart",
+          "scope" => %{"max_spend" => 50, "expires_ms" => 60_000}
+        })
+
+      assert_push_event(view, "webmcp:result", %{id: ^id2, status: "ok", result: %{granted: true}})
+
+      refute has_element?(view, "#agent-capability-request")
+
+      # a wider request asks again
+      id3 = request(view, %{"capability" => "cart", "scope" => %{"max_spend" => 900}})
+      refute_push_event(view, "webmcp:result", %{id: ^id3})
+      assert has_element?(view, "#agent-capability-request")
+      view |> element("#capability-deny") |> render_click()
+
+      assert_push_event(view, "webmcp:result", %{
+        id: ^id3,
+        status: "ok",
+        result: %{granted: false, reason: "denied"}
+      })
+
+      assert has_element?(view, "#agent-activity li[data-kind='human']", "Denied cart access")
+      # the earlier grant stays as it was
+      assert ok!(view, "get_store_state").state.capabilities["cart"].max_spend == 100.0
+    end
+
+    test "a proposal past the ceiling cannot be accepted until it fits", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      blue_xl = "#{ctx.columbia.id}_blue_xl"
+      short_32 = "#{ctx.short.id}_black_32"
+
+      render_click(view, "capability_allow", %{"capability" => "cart", "max_spend" => "100"})
+
+      id = propose(view, %{"lines" => [%{"variant_id" => blue_xl}, %{"variant_id" => short_32}]})
+      assert has_element?(view, "#proposal-ceiling[data-max-spend='100']", "Over the $100.00")
+      assert has_element?(view, "#proposal-accept[disabled]")
+
+      # server-side: a forced accept is refused and the cart stays empty
+      render_click(view, "proposal_accept", %{})
+      refute_push_event(view, "webmcp:result", %{id: ^id})
+      assert ok!(view, "get_cart").cart.items == []
+
+      assert has_element?(
+               view,
+               "#agent-activity li[data-kind='human'][data-status='error']",
+               "Accept blocked"
+             )
+
+      view |> element("#proposal-tick-1") |> render_click()
+      refute has_element?(view, "#proposal-accept[disabled]")
+      view |> element("#proposal-accept") |> render_click()
+      assert %{accepted: true, applied: [%{variant_id: ^blue_xl}]} = resolved(view, id)
+    end
+
+    test "the shopper can revoke a tier at any time, and expiry revokes it mid-session", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      blue_xl = "#{ctx.columbia.id}_blue_xl"
+
+      render_click(view, "capability_allow", %{"capability" => "cart", "max_spend" => ""})
+      assert ok!(view, "add_to_cart", %{"variant_id" => blue_xl}).success
+
+      view |> element("#capability-cart button", "Revoke") |> render_click()
+      assert has_element?(view, "#capability-cart[data-granted='false']")
+      assert has_element?(view, "#agent-activity li[data-kind='human']", "Revoked cart access")
+
+      assert %{"code" => "CAPABILITY_NOT_GRANTED"} =
+               error!(view, "add_to_cart", %{"variant_id" => blue_xl})
+
+      assert ok!(view, "get_cart").cart.item_count == 1
+
+      # even read can be switched off: a kill switch
+      view |> element("#capability-read button", "Revoke") |> render_click()
+
+      assert %{"code" => "CAPABILITY_NOT_GRANTED", "capability" => "read"} =
+               error!(view, "get_cart", %{})
+
+      view |> element("#capability-read button", "Allow") |> render_click()
+      assert ok!(view, "get_cart").cart.item_count == 1
+
+      # a grant with an expiry
+      id = request(view, %{"capability" => "cart", "scope" => %{"expires_ms" => 60_000}})
+      view |> form("#capability-request-form") |> render_submit()
+      assert_push_event(view, "webmcp:result", %{id: ^id, status: "ok", result: %{granted: true}})
+      assert ok!(view, "get_store_state").state.capabilities["cart"].expires_at_ms
+      assert ok!(view, "add_to_cart", %{"variant_id" => blue_xl}).success
+
+      %{granted_at: granted_at} = :sys.get_state(view.pid).socket.assigns.capabilities["cart"]
+      send(view.pid, {:fz_capability_expired, "cart", granted_at})
+
+      assert has_element?(view, "#capability-cart[data-granted='false']")
+      assert has_element?(view, "#agent-activity li[data-status='error']", "expired")
+
+      assert %{"code" => "CAPABILITY_NOT_GRANTED"} =
+               error!(view, "add_to_cart", %{"variant_id" => blue_xl})
+
+      assert ok!(view, "get_store_state").state.capabilities["cart"] == nil
+    end
+
+    test "timeout and supersession leave the tier blocked; bad requests fail at once", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      id = request(view, %{"capability" => "cart", "timeout_ms" => 5_000})
+      %{id: request_id} = :sys.get_state(view.pid).socket.assigns.capability_request
+      send(view.pid, {:fz_capability_timeout, request_id})
+
+      assert_push_event(view, "webmcp:result", %{
+        id: ^id,
+        status: "ok",
+        result: %{granted: false, reason: "timeout"}
+      })
+
+      id = request(view, %{"capability" => "cart"})
+      ok_id = System.unique_integer([:positive])
+
+      render_hook(view, "webmcp:call", %{
+        "id" => ok_id,
+        "tool" => "ask_human",
+        "input" => %{"question" => "Which one?"}
+      })
+
+      assert_push_event(view, "webmcp:result", %{
+        id: ^id,
+        status: "ok",
+        result: %{granted: false, reason: "superseded"}
+      })
+
+      assert has_element?(view, "#agent-question")
+      assert has_element?(view, "#capability-cart[data-granted='false']")
+
+      assert %{"code" => "INVALID_OPERATION"} =
+               error!(view, "request_capability", %{"capability" => "checkout"})
+
+      assert %{"code" => "INVALID_OPERATION"} =
+               error!(view, "request_capability", %{
+                 "capability" => "cart",
+                 "scope" => %{"max_spend" => -1}
+               })
+
+      # there is no checkout tool to grant, and the gesture check is unchanged
+      refute Enum.any?(AgentTools.tools(), &(&1.name =~ "checkout"))
+      render_hook(view, "confirm_checkout", %{})
+      refute has_element?(view, "#order-confirmation")
+    end
+  end
+
   describe "UI focus" do
     test "focus_product opens the product with the requested variant selected", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/?category=#{ctx.shirts.id}")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/?category=#{ctx.shirts.id}")
       sage_l = "#{ctx.columbia.id}_sage_l"
 
       result =
@@ -1221,7 +2130,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "focus_filter highlights a sidebar section and rejects unknown ids", ctx do
-      {:ok, view, _html} = live(ctx.conn, ~p"/")
+      {:ok, view, _html} = live_granted(ctx.conn, ~p"/")
 
       assert ok!(view, "focus_filter", %{"filter_id" => "color"}).success
       assert_push_event(view, "fz:focus", %{id: "filter-colors"})
@@ -1230,7 +2139,7 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     end
 
     test "the transport report marks the agent as connected", %{conn: conn} do
-      {:ok, view, _html} = live(conn, ~p"/")
+      {:ok, view, _html} = live_granted(conn, ~p"/")
       assert has_element?(view, "#agent-status[data-agent-connected='false']")
 
       render_hook(view, "webmcp:transport", %{"native" => true, "tools" => 15})

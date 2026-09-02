@@ -15,11 +15,11 @@ defmodule FitzyoWeb.StoreLive.Proposals do
   """
 
   import Phoenix.Component, only: [assign: 2]
-  import Phoenix.LiveView, only: [push_event: 3]
+  import Phoenix.LiveView, only: [push_event: 3, put_flash: 3]
 
   alias Fitzyo.Catalog
   alias Fitzyo.Commerce
-  alias FitzyoWeb.StoreLive.{Presenter, Questions, State}
+  alias FitzyoWeb.StoreLive.{Capabilities, Members, Presenter, Questions, State}
 
   @default_timeout 300_000
   @min_timeout 5_000
@@ -124,9 +124,12 @@ defmodule FitzyoWeb.StoreLive.Proposals do
   def propose(socket, call_id, input) do
     case build(input) do
       {:ok, proposal} ->
+        proposal = with_member_budgets(proposal, socket.assigns.members)
+
         socket
         |> supersede()
         |> Questions.supersede()
+        |> Capabilities.supersede()
         |> open(Map.put(proposal, :call_id, call_id))
 
       {:error, message} ->
@@ -135,6 +138,36 @@ defmodule FitzyoWeb.StoreLive.Proposals do
           status: "error",
           error: Jason.encode!(%{success: false, code: "INVALID_OPERATION", message: message})
         })
+    end
+  end
+
+  # A registered member's budget applies to their lines unless the agent
+  # sent an explicit per-label budget.
+  defp with_member_budgets(proposal, []), do: proposal
+
+  defp with_member_budgets(proposal, members) do
+    from_members =
+      proposal.lines
+      |> Enum.map(& &1.label)
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+      |> Enum.flat_map(fn label ->
+        case Members.budget(members, label) do
+          nil -> []
+          budget -> [{label, budget}]
+        end
+      end)
+      |> Map.new()
+
+    if map_size(from_members) == 0 do
+      proposal
+    else
+      budget = %{
+        total: proposal.budget[:total],
+        by_label: Map.merge(from_members, proposal.budget[:by_label] || %{})
+      }
+
+      %{proposal | budget: budget}
     end
   end
 
@@ -182,6 +215,26 @@ defmodule FitzyoWeb.StoreLive.Proposals do
 
   def accept(socket) do
     proposal = socket.assigns.proposal
+    socket = State.load_cart(socket)
+
+    projected =
+      projected_cart_total(proposal, totals(proposal).total, socket.assigns.cart.subtotal)
+
+    case Capabilities.check_spend(socket, projected) do
+      :ok ->
+        apply_accept(socket, proposal)
+
+      {:error, error} ->
+        socket
+        |> put_flash(:error, error.message)
+        |> State.log_human("Accept blocked: #{error.message}", :error)
+    end
+  end
+
+  # The ceiling the human granted the agent applies to proposals too: the
+  # lines are the agent's, so a basket past the limit needs a bigger grant
+  # or fewer lines, not a quiet exception.
+  defp apply_accept(socket, proposal) do
     cart_id = socket.assigns.cart_id
 
     if proposal.mode == "replace", do: Commerce.clear_cart(cart_id)
@@ -193,7 +246,11 @@ defmodule FitzyoWeb.StoreLive.Proposals do
         case Commerce.add_to_cart(cart_id, line.chosen_variant_id, %{
                quantity: line.quantity,
                label: line.label,
-               source: :proposal
+               source: :proposal,
+               proposed_variant_id:
+                 if(line.chosen_variant_id != line.proposed_variant_id,
+                   do: line.proposed_variant_id
+                 )
              }) do
           {:ok, item} ->
             {[
@@ -298,6 +355,15 @@ defmodule FitzyoWeb.StoreLive.Proposals do
   end
 
   def chosen(line), do: Enum.find(line.options, &(&1.variant_id == line.chosen_variant_id))
+
+  @doc "Distinct product ids (max 4) among a group of proposal lines and their alternatives, for comparing."
+  def product_ids(lines) do
+    lines
+    |> Enum.flat_map(fn line -> Enum.map(line.options, & &1.product_id) end)
+    |> Enum.reject(&is_nil/1)
+    |> Enum.uniq()
+    |> Enum.take(4)
+  end
 
   @doc "The open proposal for `get_store_state`, or nil. Needs the current cart for the projected total."
   def pending(nil, _cart), do: nil

@@ -98,9 +98,10 @@ defmodule FitzyoWeb.StoreLive.Presenter do
     }
   end
 
-  @doc "The cart for `get_cart`; items need `variant.product` and `line_total` loaded."
-  def cart(cart) do
+  @doc "The cart for `get_cart`; items need `variant.product` and `line_total` loaded. With members, adds per-label subtotals against budgets."
+  def cart(cart, members \\ []) do
     %{
+      by_label: by_label(cart.items, members),
       cart_id: cart.id,
       items:
         Enum.map(cart.items, fn item ->
@@ -124,6 +125,25 @@ defmodule FitzyoWeb.StoreLive.Presenter do
       subtotal: number(cart.subtotal),
       currency: "USD"
     }
+  end
+
+  @doc "Per-label subtotal, budget (from a registered member), and overage."
+  def by_label(items, members) do
+    items
+    |> Enum.reject(&is_nil(&1.label))
+    |> Enum.group_by(& &1.label)
+    |> Map.new(fn {label, lines} ->
+      subtotal = Enum.reduce(lines, Decimal.new(0), &Decimal.add(&2, &1.line_total))
+      budget = FitzyoWeb.StoreLive.Members.budget(members, label)
+
+      over =
+        if budget && Decimal.compare(subtotal, budget) == :gt,
+          do: Decimal.sub(subtotal, budget),
+          else: Decimal.new(0)
+
+      {label,
+       %{subtotal: number(subtotal), budget: budget && number(budget), over_by: number(over)}}
+    end)
   end
 
   @doc "The compact cart totals returned by write operations."
@@ -150,6 +170,10 @@ defmodule FitzyoWeb.StoreLive.Presenter do
       view: if(assigns.product, do: "product", else: "results"),
       search_query: assigns.filters.query,
       filters: FitzyoWeb.StoreLive.Filters.to_params(assigns.filters),
+      filter_origins: FitzyoWeb.StoreLive.State.filter_origin_summary(assigns.filter_origins),
+      excluded_by: assigns.excluded_by,
+      removed_by_human:
+        Enum.map(assigns.removed_by_human, fn {facet, value} -> %{facet: facet, value: value} end),
       results_count: assigns.results_count,
       selected_product_id: assigns.product && assigns.product.id,
       selected_color: assigns.selected_color,
@@ -161,6 +185,10 @@ defmodule FitzyoWeb.StoreLive.Presenter do
       plan: assigns.plan,
       pending_question: FitzyoWeb.StoreLive.Questions.pending(assigns.question),
       pending_proposal: FitzyoWeb.StoreLive.Proposals.pending(assigns.proposal, assigns.cart),
+      members: Enum.map(assigns.members, &FitzyoWeb.StoreLive.Members.summary/1),
+      capabilities: FitzyoWeb.StoreLive.Capabilities.summary(assigns.capabilities),
+      pending_capability_request:
+        FitzyoWeb.StoreLive.Capabilities.pending(assigns.capability_request),
       cart: cart_totals(assigns.cart),
       cart_open: assigns.cart_open,
       agent: %{

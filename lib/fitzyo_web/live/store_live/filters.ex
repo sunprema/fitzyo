@@ -5,7 +5,8 @@ defmodule FitzyoWeb.StoreLive.Filters do
   canonical state (AGENTS.md §14).
 
   Query parameters: `q`, `category`, `gender`, `size[]`, `color[]`, `brand[]`,
-  `fit[]`, `activity[]`, `min`, `max`.
+  `fit[]`, `activity[]`, `min`, `max`, and the negative constraints
+  `exclude_color[]` and `exclude_brand[]` (AND-NOT against the rest).
   """
 
   alias Fitzyo.Catalog.Types
@@ -18,6 +19,8 @@ defmodule FitzyoWeb.StoreLive.Filters do
             sizes: [],
             colors: [],
             brands: [],
+            exclude_colors: [],
+            exclude_brands: [],
             fits: [],
             activities: [],
             price_min: nil,
@@ -27,6 +30,8 @@ defmodule FitzyoWeb.StoreLive.Filters do
     "size" => :sizes,
     "color" => :colors,
     "brand" => :brands,
+    "exclude_color" => :exclude_colors,
+    "exclude_brand" => :exclude_brands,
     "fit" => :fits,
     "activity" => :activities
   }
@@ -47,6 +52,8 @@ defmodule FitzyoWeb.StoreLive.Filters do
       sizes: list(params["size"]),
       colors: list(params["color"]),
       brands: list(params["brand"]),
+      exclude_colors: params["exclude_color"] |> list() |> Enum.map(&String.downcase/1),
+      exclude_brands: list(params["exclude_brand"]),
       fits: params["fit"] |> list() |> Enum.filter(&(&1 in @valid_fits)),
       activities: list(params["activity"]),
       price_min: decimal(params["min"]),
@@ -64,6 +71,8 @@ defmodule FitzyoWeb.StoreLive.Filters do
       "size" => filters.sizes,
       "color" => filters.colors,
       "brand" => filters.brands,
+      "exclude_color" => filters.exclude_colors,
+      "exclude_brand" => filters.exclude_brands,
       "fit" => filters.fits,
       "activity" => filters.activities,
       "min" => filters.price_min && Decimal.to_string(filters.price_min, :normal),
@@ -83,6 +92,8 @@ defmodule FitzyoWeb.StoreLive.Filters do
       sizes: filters.sizes,
       colors: filters.colors,
       brands: filters.brands,
+      exclude_colors: filters.exclude_colors,
+      exclude_brands: filters.exclude_brands,
       fits: filters.fits,
       activities: filters.activities,
       price_min: filters.price_min,
@@ -90,7 +101,7 @@ defmodule FitzyoWeb.StoreLive.Filters do
     }
   end
 
-  @doc "Toggles a value in a list facet (`\"size\"`, `\"color\"`, `\"brand\"`, `\"fit\"`, `\"activity\"`)."
+  @doc "Toggles a value in a list facet (`\"size\"`, `\"color\"`, `\"brand\"`, `\"exclude_color\"`, `\"exclude_brand\"`, `\"fit\"`, `\"activity\"`)."
   @spec toggle(t(), String.t(), String.t()) :: t()
   def toggle(%__MODULE__{} = filters, facet, value) when is_map_key(@list_facets, facet) do
     key = Map.fetch!(@list_facets, facet)
@@ -153,6 +164,11 @@ defmodule FitzyoWeb.StoreLive.Filters do
       Enum.map(f.sizes, &%{facet: "size", value: &1, label: &1}),
       Enum.map(f.colors, &%{facet: "color", value: &1, label: String.capitalize(&1)}),
       Enum.map(f.brands, &%{facet: "brand", value: &1, label: &1}),
+      Enum.map(
+        f.exclude_colors,
+        &%{facet: "exclude_color", value: &1, label: "not #{String.capitalize(&1)}"}
+      ),
+      Enum.map(f.exclude_brands, &%{facet: "exclude_brand", value: &1, label: "not #{&1}"}),
       Enum.map(f.fits, &%{facet: "fit", value: &1, label: String.capitalize(&1)}),
       Enum.map(f.activities, &%{facet: "activity", value: &1, label: String.capitalize(&1)}),
       f.price_min &&
@@ -163,6 +179,48 @@ defmodule FitzyoWeb.StoreLive.Filters do
     |> List.flatten()
     |> Enum.reject(&(&1 in [nil, false]))
   end
+
+  @doc "Every facet key that can carry a constraint, in chip display order."
+  def facet_keys,
+    do: ~w(q category gender size color brand exclude_color exclude_brand fit activity min max)
+
+  @doc "Human-readable name of a facet key, as shown on chip groups."
+  def facet_label("q"), do: "Search"
+  def facet_label("category"), do: "Category"
+  def facet_label("gender"), do: "Shop for"
+  def facet_label("size"), do: "Size"
+  def facet_label("color"), do: "Color"
+  def facet_label("brand"), do: "Brand"
+  def facet_label("exclude_color"), do: "Not color"
+  def facet_label("exclude_brand"), do: "Not brand"
+  def facet_label("fit"), do: "Fit"
+  def facet_label("activity"), do: "Activity"
+  def facet_label("min"), do: "Min price"
+  def facet_label("max"), do: "Max price"
+  def facet_label(other), do: to_string(other)
+
+  @doc "Drops every value of one facet (\"loosen this constraint\")."
+  @spec clear_facet(t(), String.t()) :: t()
+  def clear_facet(filters, facet) when is_map_key(@list_facets, facet),
+    do: Map.put(filters, Map.fetch!(@list_facets, facet), [])
+
+  def clear_facet(filters, facet), do: remove(filters, facet, nil)
+
+  @doc """
+  Chips grouped by facet, in display order: `%{facet, label, chips}`. A group
+  is the unit a human loosens ("Color · hiding 22"); a chip is one value.
+  """
+  def chip_groups(%__MODULE__{} = filters) do
+    filters
+    |> chips()
+    |> Enum.group_by(& &1.facet)
+    |> Enum.map(fn {facet, chips} -> %{facet: facet, label: facet_label(facet), chips: chips} end)
+    |> Enum.sort_by(fn group -> Enum.find_index(facet_keys(), &(&1 == group.facet)) end)
+  end
+
+  @doc "The identity of a chip for origin tracking: `{facet, value}`, with scalar facets keyed by their text."
+  def chip_key(%{facet: facet, value: nil, label: label}), do: {facet, label}
+  def chip_key(%{facet: facet, value: value}), do: {facet, value}
 
   @doc "Display label for a shopper group."
   def gender_label("men"), do: "Men"

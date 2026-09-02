@@ -72,14 +72,18 @@ defmodule Fitzyo.Catalog.Variant do
       description """
       Find in-stock variants satisfying a set of shopping constraints.
       Every supplied constraint must hold (AND); list constraints match any
-      of their values (OR). Matching is case-insensitive.
+      of their values (OR). Matching is case-insensitive. `size` and `sizes`
+      combine into one OR list; exclusions are AND-NOT.
       """
 
       argument :product_id, :string
       argument :category, :string
       argument :size, :string
+      argument :sizes, {:array, :string}, default: []
       argument :colors, {:array, :string}, default: []
+      argument :exclude_colors, {:array, :string}, default: []
       argument :brands, {:array, :string}, default: []
+      argument :exclude_brands, {:array, :string}, default: []
       argument :fit, Types.Fit
       argument :activities, {:array, :string}, default: []
       argument :gender, Types.Gender

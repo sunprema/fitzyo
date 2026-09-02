@@ -21,7 +21,7 @@ defmodule FitzyoWeb.StoreLive.State do
   alias Fitzyo.Catalog.Facets
   alias Fitzyo.Commerce
   alias FitzyoWeb.StoreComponents
-  alias FitzyoWeb.StoreLive.Filters
+  alias FitzyoWeb.StoreLive.{Filters, Members}
 
   use Phoenix.VerifiedRoutes,
     endpoint: FitzyoWeb.Endpoint,
@@ -37,7 +37,7 @@ defmodule FitzyoWeb.StoreLive.State do
 
   @idle_agent %{status: :idle, message: nil, progress: nil, explicit?: false, tick: 0}
 
-  @type activity_entry :: %{call: String.t(), result: String.t(), status: :ok | :error}
+  @type activity_entry :: %{call: String.t(), result: String.t(), status: :ok | :error | :warning}
 
   # ---------------------------------------------------------------- setup
 
@@ -50,6 +50,12 @@ defmodule FitzyoWeb.StoreLive.State do
       cart_id: cart_id,
       facets: Facets.all(),
       filters: %Filters{},
+      filter_origins: %{},
+      removed_by_human: [],
+      filter_actor: :human,
+      excluded_by: %{},
+      members: [],
+      member_fits: %{},
       sizes: [],
       results_count: 0,
       product: nil,
@@ -69,10 +75,79 @@ defmodule FitzyoWeb.StoreLive.State do
 
   # ---------------------------------------------------------------- filters & results
 
-  @doc "Stores the filters and the category-dependent size facet."
+  @doc """
+  Stores the filters and the category-dependent size facet, and records who
+  set each constraint. The actor is whoever triggered the patch
+  (`patch_filters/3`); a URL visit or back button counts as the human.
+
+  Every constraint keeps its origin (`:agent` or `:human`) until it is
+  removed. When the human removes an agent constraint it is remembered in
+  `removed_by_human`, and an agent re-applying it, or clearing a human one,
+  is written to the feed as such, so the shopper's corrections are visible
+  to both sides.
+  """
   def put_filters(socket, %Filters{} = filters) do
-    assign(socket, filters: filters, sizes: Facets.sizes_for_category(filters.category))
+    actor = socket.assigns[:filter_actor] || :human
+    old_keys = socket.assigns.filters |> Filters.chips() |> Enum.map(&Filters.chip_key/1)
+    new_chips = Filters.chips(filters)
+    new_keys = Enum.map(new_chips, &Filters.chip_key/1)
+    origins = socket.assigns[:filter_origins] || %{}
+
+    added = new_keys -- old_keys
+    removed = old_keys -- new_keys
+
+    next_origins =
+      origins
+      |> Map.drop(removed)
+      |> Map.merge(Map.new(added, &{&1, actor}))
+
+    socket
+    |> assign(
+      filters: filters,
+      sizes: Facets.sizes_for_category(filters.category),
+      filter_origins: next_origins,
+      filter_actor: :human
+    )
+    |> note_filter_changes(actor, origins, added, removed)
   end
+
+  defp note_filter_changes(socket, :human, origins, _added, removed) do
+    overridden = Enum.filter(removed, &(origins[&1] == :agent))
+
+    socket
+    |> update(:removed_by_human, &Enum.uniq(&1 ++ overridden))
+    |> then(fn socket ->
+      Enum.reduce(overridden, socket, fn key, socket ->
+        log_human(socket, "Removed the agent's #{describe_key(key)} constraint")
+      end)
+    end)
+  end
+
+  defp note_filter_changes(socket, :agent, origins, added, removed) do
+    reapplied = Enum.filter(added, &(&1 in socket.assigns.removed_by_human))
+    cleared = Enum.filter(removed, &(origins[&1] == :human))
+
+    socket =
+      Enum.reduce(reapplied, socket, fn key, socket ->
+        log_activity(
+          socket,
+          "filter #{describe_key(key)}",
+          "re-applied a constraint you removed earlier",
+          :warning
+        )
+      end)
+
+    Enum.reduce(cleared, socket, fn key, socket ->
+      log_activity(
+        socket,
+        "filter #{describe_key(key)}",
+        "cleared a constraint you set",
+        :warning
+      )
+    end)
+  end
+
+  defp describe_key({facet, value}), do: "#{Filters.facet_label(facet)}: #{value}"
 
   @doc "Runs the catalog query for `filters`."
   def fetch_results(%Filters{} = filters) do
@@ -81,18 +156,55 @@ defmodule FitzyoWeb.StoreLive.State do
     |> Catalog.filter_products!(load: @results_load)
   end
 
-  @doc "Refreshes the results stream from the current filters."
+  @doc """
+  Refreshes the results stream from the current filters and counts, per
+  active facet, how many more products would show if only that facet were
+  dropped (`excluded_by`).
+  """
   def load_results(socket) do
-    products = fetch_results(socket.assigns.filters)
+    filters = socket.assigns.filters
+    products = fetch_results(filters)
+    count = length(products)
+
+    excluded_by =
+      filters
+      |> Filters.chip_groups()
+      |> Map.new(fn %{facet: facet} ->
+        without = filters |> Filters.clear_facet(facet) |> fetch_results() |> length()
+        {facet, max(without - count, 0)}
+      end)
 
     socket
-    |> assign(results_count: length(products))
+    |> assign(
+      results_count: count,
+      excluded_by: excluded_by,
+      member_fits: Members.fits_map(socket.assigns.members, products)
+    )
     |> stream(:products, products, reset: true)
   end
 
-  @doc "Navigates to the results page with `filters` applied; `handle_params` reloads."
-  def patch_filters(socket, %Filters{} = filters) do
-    push_patch(socket, to: index_path(filters))
+  @doc """
+  Navigates to the results page with `filters` applied; `handle_params`
+  reloads. `actor` says who is changing the constraints and is consumed by
+  `put_filters/2`.
+  """
+  def patch_filters(socket, %Filters{} = filters, actor \\ :human) do
+    socket
+    |> assign(filter_actor: actor)
+    |> push_patch(to: index_path(filters))
+  end
+
+  @doc "Per-facet origin for `get_store_state`: agent, human, or mixed."
+  def filter_origin_summary(origins) do
+    origins
+    |> Enum.group_by(fn {{facet, _}, _} -> facet end, fn {_, actor} -> actor end)
+    |> Map.new(fn {facet, actors} ->
+      {facet,
+       case Enum.uniq(actors) do
+         [one] -> to_string(one)
+         _ -> "mixed"
+       end}
+    end)
   end
 
   def index_path(%Filters{} = filters), do: ~p"/?#{Filters.to_params(filters)}"
@@ -294,6 +406,35 @@ defmodule FitzyoWeb.StoreLive.State do
     )
   end
 
+  @doc """
+  Agent-side lifecycle for its own annotations (`clear_annotations`): drops
+  every annotation matching the given label, product, and source, any of
+  which may be nil to mean "any". Returns the socket and how many went.
+  """
+  def clear_annotations(socket, label, product_id, source) do
+    before = socket.assigns.annotations |> Map.values() |> List.flatten() |> length()
+
+    socket =
+      update_annotations(
+        socket,
+        &drop_annotations(&1, fn a ->
+          (is_nil(label) or a.label == label) and
+            (is_nil(product_id) or a.product_id == product_id) and
+            (is_nil(source) or a.source == source)
+        end)
+      )
+
+    after_count = socket.assigns.annotations |> Map.values() |> List.flatten() |> length()
+    {socket, before - after_count}
+  end
+
+  @doc "Product ids annotated under `label`, in first-seen order."
+  def products_for_label(annotations, label) do
+    annotations
+    |> Enum.filter(fn {_id, entries} -> Enum.any?(entries, &(&1.label == label)) end)
+    |> Enum.map(fn {id, _} -> id end)
+  end
+
   @doc "Annotations for one product, or `[]`."
   def annotations_for(annotations, product_id), do: Map.get(annotations, product_id, [])
 
@@ -335,6 +476,29 @@ defmodule FitzyoWeb.StoreLive.State do
   # re-inserted. Cheap enough for a demo catalog.
   defp refresh_listing(%{assigns: %{product: nil}} = socket), do: load_results(socket)
   defp refresh_listing(socket), do: socket
+
+  # ---------------------------------------------------------------- party members
+
+  @doc "Registers or replaces a member and re-badges the listing."
+  def put_member(socket, member) do
+    with {:ok, members} <- Members.put(socket.assigns.members, member) do
+      {:ok, socket |> assign(members: members) |> refresh_listing()}
+    end
+  end
+
+  @doc "Forgets a member: their badges, the agent's matches for them, and their budget."
+  def remove_member(socket, label) do
+    case Members.find(socket.assigns.members, label) do
+      nil ->
+        {:error, :not_found}
+
+      member ->
+        {:ok,
+         socket
+         |> assign(members: Enum.reject(socket.assigns.members, &(&1.label == member.label)))
+         |> clear_label(member.label)}
+    end
+  end
 
   # ---------------------------------------------------------------- agent plan
 
