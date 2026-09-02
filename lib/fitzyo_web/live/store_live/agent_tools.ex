@@ -375,7 +375,14 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
         {:ok, result, State.log_activity(socket, call_label(name, input), "ok")}
 
       {:error, %{code: _} = error} ->
-        send(self(), {:fz_activity, call_label(name, input), error.message, :error})
+        # The feed is the shopper's audit surface: a rejected call gets the
+        # same one-line shape as a successful one, reason first, never the
+        # raw input (a large payload would push everything else off screen).
+        send(
+          self(),
+          {:fz_activity, short_label(name, input), "rejected: " <> error.message, :error}
+        )
+
         {:error, Jason.encode!(Map.put(error, :success, false))}
     end
   end
@@ -1228,6 +1235,25 @@ defmodule FitzyoWeb.StoreLive.AgentTools do
   end
 
   defp money(%Decimal{} = amount), do: "$" <> Decimal.to_string(Decimal.round(amount, 2), :normal)
+
+  # `name("the one thing that identifies the call")`, bounded in length.
+  @label_keys ~w(title query label capability member product_id variant_id category filter_id)
+  @label_max 72
+
+  defp short_label(name, input) when map_size(input) == 0, do: "#{name}()"
+
+  defp short_label(name, input) do
+    case Enum.find_value(@label_keys, fn key -> input[key] end) do
+      value when is_binary(value) and value != "" ->
+        "#{name}(#{Jason.encode!(truncate(value, @label_max))})"
+
+      _ ->
+        "#{name}(…)"
+    end
+  end
+
+  defp truncate(text, max) when byte_size(text) > max, do: String.slice(text, 0, max - 1) <> "…"
+  defp truncate(text, _max), do: text
 
   defp call_label(name, input) when map_size(input) == 0, do: "#{name}()"
 

@@ -1673,10 +1673,37 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
       refute has_element?(view, "#lookbook")
       assert ok!(view, "get_store_state").state.lookbook == nil
 
-      # validation
+      # a need slot the way the schema advertises: text, or a bare placeholder
+      ok!(view, "present_lookbook", %{
+        "days" => [
+          %{
+            "label" => "Day 2",
+            "slots" => [
+              %{
+                "label" => "Mom",
+                "status" => "need",
+                "note" => "still looking for hiking shorts"
+              },
+              %{"label" => "Milo", "status" => "need", "text" => "hiking shorts"}
+            ]
+          }
+        ]
+      })
+
+      assert has_element?(
+               view,
+               "#lookbook-slot-0-0[data-status='need']",
+               "still looking for hiking shorts"
+             )
+
+      assert has_element?(view, "#lookbook-slot-0-1[data-status='need']", "hiking shorts")
+      assert has_element?(view, "#lookbook-to-buy", "0 to buy")
+
+      # validation names the field for the status
       assert %{
                "code" => "INVALID_OPERATION",
-               "message" => "day 1: slot 1: needs a product_id or text"
+               "message" =>
+                 "day 1: slot 1: needs a product_id (picked) or text (have); only a need slot may have neither"
              } =
                error!(view, "present_lookbook", %{
                  "days" => [%{"label" => "Day 1", "slots" => [%{"label" => "Dad"}]}]
@@ -1707,6 +1734,50 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
                    }
                  ]
                })
+    end
+
+    test "a rejected call is one bounded feed line with the reason first, whatever its size",
+         ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/")
+
+      days =
+        for d <- 1..14 do
+          %{
+            "label" => "Day #{d}: " <> String.duplicate("beach ", 20),
+            "slots" =>
+              for s <- 1..11 do
+                %{
+                  "label" => "Person #{s}",
+                  "product_id" => ctx.columbia.id,
+                  "note" => String.duplicate("x", 200)
+                }
+              end ++ [%{"label" => "Dad"}]
+          }
+        end
+
+      error!(view, "present_lookbook", %{
+        "title" => "Seven days — family lookbook",
+        "days" => days
+      })
+
+      [entry] =
+        :sys.get_state(view.pid).socket.assigns.activity |> Enum.filter(&(&1[:status] == :error))
+
+      assert entry.call == ~s|present_lookbook("Seven days — family lookbook")|
+      assert entry.result =~ "rejected: day 1: slot 12"
+      assert String.length(entry.call) + String.length(entry.result) < 200
+      refute entry.call =~ "product_id"
+
+      # every tool's rejection path goes the same way
+      error!(view, "filter_products", %{
+        "category" => "hats",
+        "color" => Enum.map(1..300, &"c#{&1}")
+      })
+
+      last = List.last(:sys.get_state(view.pid).socket.assigns.activity)
+      assert last.call == ~s|filter_products("hats")|
+      assert last.result =~ "rejected: Unknown category"
+      assert String.length(last.call) < 100
     end
 
     test "the human can dismiss the lookbook, and it needs only the suggest tier", ctx do

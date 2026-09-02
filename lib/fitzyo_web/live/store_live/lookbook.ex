@@ -31,7 +31,7 @@ defmodule FitzyoWeb.StoreLive.Lookbook do
     %{
       name: "present_lookbook",
       description:
-        "Lay the trip out as a timeline in the store: one column per day with a label and activities, and one slot per person per item worn that day. Slots point at a variant you picked (product_id, optional variant_id) or, for something the family already owns, plain text with status have; never describe the wardrobe beyond that text. The store prices each slot, marks what is already in the cart, notes items worn on several days, and totals what is still to buy. The shopper can drop a slot, mark it already owned, or add it to the cart; read get_store_state.lookbook to see their version. Replaces any earlier lookbook; send days: [] to clear it. Presentation only.",
+        "Lay the trip out as a timeline in the store: one column per day with a label and activities, and one slot per person per item worn that day. A slot is one of three things: status picked, a variant you chose (product_id, optional variant_id); status have, something the family already owns, as plain text (never describe the wardrobe beyond that text); or status need, something you are still looking for, as text or as a bare placeholder with just a label. The store prices each slot, marks what is already in the cart, notes items worn on several days, and totals what is still to buy. The shopper can drop a slot, mark it already owned, or add it to the cart; read get_store_state.lookbook to see their version. Replaces any earlier lookbook; send days: [] to clear it. Presentation only.",
       input_schema:
         object(
           %{
@@ -57,14 +57,14 @@ defmodule FitzyoWeb.StoreLive.Lookbook do
                             text: %{
                               type: "string",
                               description:
-                                "For status have: what they already own, e.g. \"navy swim trunks\""
+                                "For have: what they already own, e.g. \"navy swim trunks\"; for need: what you are still looking for, e.g. \"hiking shorts\". Optional for need."
                             },
                             status: %{
                               type: "string",
                               enum: @statuses,
                               default: "picked",
                               description:
-                                "have: already owned · need: still looking · picked: chosen"
+                                "picked: a variant you chose (product_id) · have: already owned (text) · need: still looking (text, or nothing)"
                             },
                             note: %{
                               type: "string",
@@ -150,7 +150,11 @@ defmodule FitzyoWeb.StoreLive.Lookbook do
     text = blank_to_nil(slot["text"])
 
     with :ok <- check(status in @statuses, "status must be one of #{Enum.join(@statuses, ", ")}"),
-         :ok <- check(product_id != nil or text != nil, "needs a product_id or text"),
+         :ok <-
+           check(
+             status == "need" or product_id != nil or text != nil,
+             "needs a product_id (picked) or text (have); only a need slot may have neither"
+           ),
          {:ok, product} <- card(product_id, blank_to_nil(slot["variant_id"])) do
       {:ok,
        %{
