@@ -53,3 +53,7 @@ mix test         # runs against fitzyo_test
 mix precommit    # compile with warnings as errors, format, test
 mix ash.codegen <name> && mix ash.migrate   # after changing Ash resources
 ```
+
+## License
+
+FitzYo is released under the [MIT License](LICENSE).
