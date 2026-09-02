@@ -210,6 +210,9 @@ defmodule FitzyoWeb.StoreLive.State do
 
   def index_path(%Filters{} = filters), do: ~p"/?#{Filters.to_params(filters)}"
 
+  @doc "The order review page; filters ride along so leaving it restores the same results."
+  def review_path(%Filters{} = filters), do: ~p"/checkout?#{Filters.to_params(filters)}"
+
   def product_path(id, %Filters{} = filters),
     do: ~p"/products/#{id}?#{Filters.to_params(filters)}"
 
@@ -512,7 +515,26 @@ defmodule FitzyoWeb.StoreLive.State do
 
   @doc "Reloads the session cart with totals and item details."
   def load_cart(socket) do
-    assign(socket, cart: Commerce.get_cart!(socket.assigns.cart_id, load: @cart_load))
+    cart = Commerce.get_cart!(socket.assigns.cart_id, load: @cart_load)
+    socket = assign(socket, cart: cart)
+
+    # While the human is reviewing, any change to the cart (theirs or the
+    # agent's) invalidates the approval nonce: a hold must never approve
+    # something other than what was on screen.
+    case socket.assigns[:review_fingerprint] do
+      nil -> socket
+      fingerprint -> mark_review_stale(socket, fingerprint != cart_fingerprint(cart))
+    end
+  end
+
+  defp mark_review_stale(socket, false), do: socket
+
+  defp mark_review_stale(socket, true),
+    do: assign(socket, checkout_nonce: nil, review_stale: true)
+
+  @doc "What the human is approving: every line's variant and quantity."
+  def cart_fingerprint(cart) do
+    cart.items |> Enum.map(&{&1.variant_id, &1.quantity}) |> Enum.sort()
   end
 
   # ---------------------------------------------------------------- agent activity & focus

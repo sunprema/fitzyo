@@ -65,8 +65,9 @@ defmodule FitzyoWeb.StoreLive do
        agent_transport: nil,
        tool_count: length(AgentTools.tools()),
        order_confirmation: nil,
-       checkout_review: false,
        checkout_nonce: nil,
+       review_fingerprint: nil,
+       review_stale: false,
        question: nil,
        proposal: nil
      )}
@@ -82,15 +83,47 @@ defmodule FitzyoWeb.StoreLive do
 
         {:noreply,
          socket
+         |> leave_review()
          |> assign(product: nil, page_title: heading)
          |> State.load_results()}
 
       :show ->
         case State.load_product(socket, params["id"]) do
-          {:ok, socket} -> {:noreply, assign(socket, size_guide_open: false)}
-          {:error, socket} -> {:noreply, socket}
+          {:ok, socket} -> {:noreply, assign(leave_review(socket), size_guide_open: false)}
+          {:error, socket} -> {:noreply, leave_review(socket)}
         end
+
+      :review ->
+        socket = assign(socket, product: nil, page_title: "Review your order")
+
+        if socket.assigns.cart.items == [],
+          do: {:noreply, leave_review(socket)},
+          else: {:noreply, open_review(socket, "Opened order review")}
     end
+  end
+
+  # The review page is the human's approval step. Opening it mints a
+  # single-use nonce that only the press-and-hold hook receives, and
+  # remembers what was on screen so a cart change can revoke it.
+  defp open_review(socket, message) do
+    nonce = Base.url_encode64(:crypto.strong_rand_bytes(18), padding: false)
+    cart = socket.assigns.cart
+
+    socket
+    |> assign(
+      checkout_nonce: nonce,
+      review_fingerprint: State.cart_fingerprint(cart),
+      review_stale: false,
+      cart_open: false
+    )
+    |> push_event("fz:checkout_nonce", %{nonce: nonce})
+    |> State.log_human(
+      "#{message} (#{items_label(cart.item_count)}, #{format_price(cart.subtotal)})"
+    )
+  end
+
+  defp leave_review(socket) do
+    assign(socket, checkout_nonce: nil, review_fingerprint: nil, review_stale: false)
   end
 
   # ---------------------------------------------------------------- events: search & filters
@@ -134,7 +167,8 @@ defmodule FitzyoWeb.StoreLive do
 
   # Drop every constraint one owner set: "undo what the agent did" or "keep
   # only the agent's constraints".
-  def handle_event("clear_origin", %{"origin" => origin}, socket) when origin in ~w(human agent) do
+  def handle_event("clear_origin", %{"origin" => origin}, socket)
+      when origin in ~w(human agent) do
     filters =
       Filters.clear_origin(
         socket.assigns.filters,
@@ -313,22 +347,20 @@ defmodule FitzyoWeb.StoreLive do
   end
 
   def handle_event("checkout", _params, socket) do
-    nonce = Base.url_encode64(:crypto.strong_rand_bytes(18), padding: false)
-
-    {:noreply,
-     socket
-     |> assign(checkout_review: true, checkout_nonce: nonce)
-     |> push_event("fz:checkout_nonce", %{nonce: nonce})
-     |> State.log_human(
-       "Opened order review (#{items_label(socket.assigns.cart.item_count)}, #{format_price(socket.assigns.cart.subtotal)})"
-     )}
+    {:noreply, push_patch(socket, to: State.review_path(socket.assigns.filters))}
   end
 
   def handle_event("cancel_checkout", _params, socket) do
     {:noreply,
      socket
-     |> assign(checkout_review: false, checkout_nonce: nil)
-     |> State.log_human("Went back to the cart without ordering")}
+     |> assign(cart_open: true)
+     |> State.log_human("Went back to the cart without ordering")
+     |> push_patch(to: State.index_path(socket.assigns.filters))}
+  end
+
+  # The cart changed under the review; the human says they have re-read it.
+  def handle_event("refresh_review", _params, %{assigns: %{live_action: :review}} = socket) do
+    {:noreply, open_review(socket, "Re-read the order after the cart changed")}
   end
 
   def handle_event("confirm_checkout", params, socket) do
@@ -339,14 +371,14 @@ defmodule FitzyoWeb.StoreLive do
        |> assign(
          order_confirmation:
            Map.put(confirmation, :approved_by, "a human press-and-hold on this device"),
-         cart_open: false,
-         checkout_review: false,
-         checkout_nonce: nil
+         cart_open: false
        )
+       |> leave_review()
        |> State.log_human(
          "Approved and placed order #{confirmation.order_number} · #{items_label(confirmation.item_count)} · #{format_price(confirmation.subtotal)} · #{provenance_summary(confirmation.by_source)}"
        )
-       |> State.load_cart()}
+       |> State.load_cart()
+       |> push_patch(to: State.index_path(socket.assigns.filters))}
     else
       {:error, :not_approved} ->
         {:noreply,
@@ -610,10 +642,15 @@ defmodule FitzyoWeb.StoreLive do
           proposal={@proposal}
           capability_request={@capability_request}
         />
-        <.selections :if={@cart.items != []} cart={@cart} filters={@filters} />
+        <.selections
+          :if={@cart.items != [] and @live_action != :review}
+          cart={@cart}
+          filters={@filters}
+        />
 
         <div class="flex flex-1 min-h-0">
           <.filter_rail
+            :if={@live_action != :review}
             filters={@filters}
             facets={@facets}
             sizes={@sizes}
@@ -621,31 +658,40 @@ defmodule FitzyoWeb.StoreLive do
           />
 
           <main class="fz-scroll min-w-0 flex-1 overflow-y-auto px-4 py-5 md:px-6">
-            <%= if @product do %>
-              <.product_detail
-                product={@product}
+            <%= if @live_action == :review do %>
+              <.checkout_review
+                cart={@cart}
                 members={@members}
                 filters={@filters}
-                selected_color={@selected_color}
-                selected_size={@selected_size}
-                variant={@variant}
-                size_guide_open={@size_guide_open}
-                comparing={Enum.any?(@comparison, &(&1.id == @product.id))}
-                annotations={State.annotations_for(@annotations, @product.id)}
+                stale={@review_stale}
               />
             <% else %>
-              <.lookbook :if={@lookbook} lookbook={@lookbook} cart={@cart} filters={@filters} />
-              <.comparison :if={@comparison != []} products={@comparison} filters={@filters} />
-              <.results
-                filters={@filters}
-                facets={@facets}
-                chips={@chips}
-                chip_sections={@chip_sections}
-                results_count={@results_count}
-                streams={@streams}
-                annotations={@annotations}
-                member_fits={@member_fits}
-              />
+              <%= if @product do %>
+                <.product_detail
+                  product={@product}
+                  members={@members}
+                  filters={@filters}
+                  selected_color={@selected_color}
+                  selected_size={@selected_size}
+                  variant={@variant}
+                  size_guide_open={@size_guide_open}
+                  comparing={Enum.any?(@comparison, &(&1.id == @product.id))}
+                  annotations={State.annotations_for(@annotations, @product.id)}
+                />
+              <% else %>
+                <.lookbook :if={@lookbook} lookbook={@lookbook} cart={@cart} filters={@filters} />
+                <.comparison :if={@comparison != []} products={@comparison} filters={@filters} />
+                <.results
+                  filters={@filters}
+                  facets={@facets}
+                  chips={@chips}
+                  chip_sections={@chip_sections}
+                  results_count={@results_count}
+                  streams={@streams}
+                  annotations={@annotations}
+                  member_fits={@member_fits}
+                />
+              <% end %>
             <% end %>
           </main>
 
@@ -666,7 +712,6 @@ defmodule FitzyoWeb.StoreLive do
         </div>
 
         <.cart_drawer :if={@cart_open} cart={@cart} members={@members} />
-        <.checkout_review :if={@checkout_review} cart={@cart} />
         <.order_confirmation :if={@order_confirmation} confirmation={@order_confirmation} />
       </div>
     </Layouts.app>
@@ -2765,77 +2810,7 @@ defmodule FitzyoWeb.StoreLive do
               </span>
             </h3>
             <ul class="flex flex-col gap-3.5">
-              <li
-                :for={item <- items}
-                id={"cart-item-#{item.id}"}
-                data-cart-item-id={item.id}
-                data-variant-id={item.variant_id}
-                data-product-id={item.variant.product_id}
-                data-quantity={item.quantity}
-                class="flex gap-3 border-b border-base-200 pb-3.5"
-              >
-                <.product_art
-                  name={item.variant.product.name}
-                  hex={item.variant.color_hex}
-                  class="size-16 shrink-0 rounded-[10px] [&>span:first-child]:text-lg"
-                />
-                <div class="min-w-0 flex-1">
-                  <.link
-                    patch={~p"/products/#{item.variant.product_id}"}
-                    phx-click="toggle_cart"
-                    class="block truncate text-[13px] font-semibold hover:underline"
-                  >
-                    {item.variant.product.name}
-                  </.link>
-                  <div class="text-xs text-muted">
-                    {humanize(item.variant.color)} / {item.variant.size}
-                    <span
-                      :if={item.source != :human}
-                      class="ml-1 rounded-full bg-mint px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-secondary dark:bg-base-300"
-                      title={
-                        if item.source == :proposal,
-                          do: "Proposed by your agent, accepted by you",
-                          else: "Added by your agent"
-                      }
-                      data-source={item.source}
-                    >
-                      ✦ {if item.source == :proposal, do: "accepted", else: "agent"}
-                    </span>
-                  </div>
-                  <div class="mt-1.5 flex items-center justify-between">
-                    <div class="flex items-center gap-1 rounded-full border border-base-300">
-                      <button
-                        type="button"
-                        phx-click="cart_decrement"
-                        phx-value-id={item.id}
-                        aria-label="Decrease quantity"
-                        class="px-2 py-0.5 text-sm cursor-pointer"
-                      >
-                        −
-                      </button>
-                      <span class="min-w-4 text-center text-xs font-semibold">{item.quantity}</span>
-                      <button
-                        type="button"
-                        phx-click="cart_increment"
-                        phx-value-id={item.id}
-                        aria-label="Increase quantity"
-                        class="px-2 py-0.5 text-sm cursor-pointer"
-                      >
-                        +
-                      </button>
-                    </div>
-                    <span class="text-[13px] font-bold">{format_price(item.line_total)}</span>
-                  </div>
-                  <button
-                    type="button"
-                    phx-click="remove_cart_item"
-                    phx-value-id={item.id}
-                    class="mt-1 text-xs text-error cursor-pointer hover:underline"
-                  >
-                    Remove
-                  </button>
-                </div>
-              </li>
+              <.cart_line :for={item <- items} item={item} />
             </ul>
           </section>
         </div>
@@ -2869,76 +2844,268 @@ defmodule FitzyoWeb.StoreLive do
     """
   end
 
-  attr :cart, :map, required: true
+  attr :item, :map, required: true
+  attr :id_prefix, :string, default: "cart-item"
+  attr :editable, :boolean, default: true
 
-  defp checkout_review(assigns) do
+  # One cart line, as seen in the drawer (editable) and on the review page
+  # (read-only), so the human approves exactly what the drawer showed.
+  defp cart_line(assigns) do
     ~H"""
-    <div
+    <li
+      id={"#{@id_prefix}-#{@item.id}"}
+      data-cart-item-id={@item.id}
+      data-variant-id={@item.variant_id}
+      data-product-id={@item.variant.product_id}
+      data-quantity={@item.quantity}
+      data-source={@item.source}
+      class="flex gap-3 border-b border-base-200 pb-3.5 last:border-b-0 last:pb-0"
+    >
+      <.product_art
+        name={@item.variant.product.name}
+        hex={@item.variant.color_hex}
+        class="size-16 shrink-0 rounded-[10px] [&>span:first-child]:text-lg"
+      />
+      <div class="min-w-0 flex-1">
+        <.link
+          patch={~p"/products/#{@item.variant.product_id}"}
+          phx-click={@editable && "toggle_cart"}
+          class="block truncate text-[13px] font-semibold hover:underline"
+        >
+          {@item.variant.product.name}
+        </.link>
+        <div class="text-xs text-muted">
+          {humanize(@item.variant.color)} / {@item.variant.size}
+          <span
+            :if={@item.source != :human}
+            class="ml-1 rounded-full bg-mint px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-secondary dark:bg-base-300"
+            title={
+              if @item.source == :proposal,
+                do: "Proposed by your agent, accepted by you",
+                else: "Added by your agent"
+            }
+          >
+            ✦ {if @item.source == :proposal, do: "accepted", else: "agent"}
+          </span>
+        </div>
+        <div class="mt-1.5 flex items-center justify-between">
+          <div :if={@editable} class="flex items-center gap-1 rounded-full border border-base-300">
+            <button
+              type="button"
+              phx-click="cart_decrement"
+              phx-value-id={@item.id}
+              aria-label="Decrease quantity"
+              class="px-2 py-0.5 text-sm cursor-pointer"
+            >
+              −
+            </button>
+            <span class="min-w-4 text-center text-xs font-semibold">{@item.quantity}</span>
+            <button
+              type="button"
+              phx-click="cart_increment"
+              phx-value-id={@item.id}
+              aria-label="Increase quantity"
+              class="px-2 py-0.5 text-sm cursor-pointer"
+            >
+              +
+            </button>
+          </div>
+          <span :if={!@editable} class="text-xs text-muted">Qty {@item.quantity}</span>
+          <span class="text-[13px] font-bold">{format_price(@item.line_total)}</span>
+        </div>
+        <button
+          :if={@editable}
+          type="button"
+          phx-click="remove_cart_item"
+          phx-value-id={@item.id}
+          class="mt-1 text-xs text-error cursor-pointer hover:underline"
+        >
+          Remove
+        </button>
+      </div>
+    </li>
+    """
+  end
+
+  attr :cart, :map, required: true
+  attr :members, :list, required: true
+  attr :filters, Filters, required: true
+  attr :stale, :boolean, required: true
+
+  # The human's approval page. No agent tool reaches it: the only way to
+  # place the order is the press-and-hold at the bottom of the summary.
+  defp checkout_review(assigns) do
+    assigns =
+      assign(assigns,
+        by_label: FitzyoWeb.StoreLive.Presenter.by_label(assigns.cart.items, assigns.members),
+        by_source: cart_by_source(assigns.cart.items)
+      )
+
+    ~H"""
+    <section
       id="checkout-review"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-[#1e2b24]/45 p-4"
-      role="dialog"
-      aria-modal="true"
+      class="fz-fade mx-auto w-full max-w-[1040px]"
       aria-labelledby="checkout-review-title"
     >
-      <div class="flex max-h-[85vh] w-full max-w-[440px] flex-col rounded-[20px] bg-base-100 p-6">
-        <h2 id="checkout-review-title" class="font-display text-xl">Review your order</h2>
-        <p class="mb-4 text-[13px] text-muted">
-          Check every line before placing the order. This is the step no agent can take for you.
-        </p>
-        <ul class="fz-scroll flex-1 divide-y divide-base-200 overflow-y-auto">
-          <li
-            :for={item <- @cart.items}
-            class="flex items-center justify-between gap-3 py-2 text-[13px]"
-            data-variant-id={item.variant_id}
-          >
-            <span class="min-w-0">
-              <span
-                :if={item.label}
-                class="mr-1 rounded-full bg-accent px-1.5 py-px text-[9px] font-bold text-accent-content"
-              >
-                {item.label}
-              </span>
-              <span class="font-semibold">{item.variant.product.name}</span>
-              <span class="text-muted"> · {humanize(item.variant.color)} / {item.variant.size} × {item.quantity}</span>
-            </span>
-            <span class="shrink-0 font-bold">{format_price(item.line_total)}</span>
-          </li>
-        </ul>
-        <div class="mt-4 flex justify-between border-t border-base-300 pt-3 text-sm font-bold">
-          <span>Total</span>
-          <span>{format_price(@cart.subtotal)}</span>
+      <div class="mb-5 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
+        <div>
+          <h1 id="checkout-review-title" class="font-display text-[22px] font-semibold">
+            Review your order
+          </h1>
+          <p class="text-[13px] text-muted">
+            Check every line before placing the order. This is the step no agent can take for you.
+          </p>
         </div>
-        <div class="mt-4 flex gap-2">
-          <button
-            type="button"
-            id="cancel-checkout"
-            phx-click="cancel_checkout"
-            class="flex-1 rounded-xl border border-base-300 py-3 text-sm font-semibold cursor-pointer hover:bg-base-200"
-          >
-            Back to cart
-          </button>
-          <button
-            type="button"
-            id="confirm-checkout"
-            phx-hook="FzHoldToConfirm"
-            data-hold-ms="700"
-            aria-describedby="confirm-checkout-help"
-            class="relative flex-1 select-none overflow-hidden rounded-xl bg-primary py-3 text-sm font-bold text-primary-content cursor-pointer hover:brightness-95"
-          >
-            <span
-              class="absolute inset-y-0 left-0 w-0 bg-secondary/70 transition-[width] duration-75"
-              data-hold-fill
-              aria-hidden="true"
-            />
-            <span class="relative">Press and hold to place order</span>
-          </button>
-        </div>
-        <p id="confirm-checkout-help" class="mt-2 text-center text-[11px] text-faint">
-          Holding the button is your approval; an agent cannot do it for you. Demo only — no payment is processed.
-        </p>
+        <.link
+          patch={State.index_path(@filters)}
+          class="text-[13px] text-muted underline hover:text-base-content"
+        >
+          Continue shopping
+        </.link>
       </div>
-    </div>
+
+      <div
+        :if={@cart.items == []}
+        id="review-empty"
+        class="rounded-2xl border border-base-300 bg-base-100 p-8 text-center"
+      >
+        <div class="mb-2 text-[15px] font-bold">Nothing to review</div>
+        <p class="text-[13px] text-muted">Your cart is empty.</p>
+        <.link
+          patch={State.index_path(@filters)}
+          class="mt-4 inline-block rounded-full bg-primary px-4 py-2 text-[13px] font-semibold text-primary-content"
+        >
+          Back to the store
+        </.link>
+      </div>
+
+      <div
+        :if={@cart.items != []}
+        class="grid gap-6 md:grid-cols-[minmax(0,1fr)_320px] md:items-start"
+      >
+        <div id="review-lines" class="flex flex-col gap-5">
+          <section
+            :for={{label, items} <- cart_groups(@cart.items)}
+            id={"review-group-#{dom_slug(label || "everyone")}"}
+            data-label={label}
+            class="rounded-2xl border border-base-300 bg-base-100 p-4"
+          >
+            <h2 class="mb-3 flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-primary">
+              <span>{label || "Your picks"}</span>
+              <span
+                :if={label && @by_label[label]}
+                class={[
+                  "normal-case tracking-normal tabular-nums",
+                  if(@by_label[label].over_by > 0, do: "text-error", else: "text-muted")
+                ]}
+              >
+                {member_budget_line(@by_label[label])}
+              </span>
+            </h2>
+            <ul class="flex flex-col gap-3.5">
+              <.cart_line :for={item <- items} item={item} id_prefix="review-item" editable={false} />
+            </ul>
+          </section>
+        </div>
+
+        <aside
+          id="review-summary"
+          class="rounded-2xl border border-base-300 bg-base-100 p-5 md:sticky md:top-4"
+        >
+          <h2 class="mb-3 font-display text-lg">Order summary</h2>
+          <dl class="flex flex-col gap-1.5 text-[13px]">
+            <div class="flex justify-between">
+              <dt class="text-muted">Items</dt>
+              <dd class="tabular-nums">{@cart.item_count}</dd>
+            </div>
+            <div :for={{label, totals} <- Enum.sort(@by_label)} class="flex justify-between">
+              <dt class="text-muted">{label}</dt>
+              <dd class={["tabular-nums", totals.over_by > 0 && "text-error"]}>
+                {member_budget_line(totals)}
+              </dd>
+            </div>
+          </dl>
+          <p id="review-provenance" class="mt-3 text-[11px] text-faint">
+            {provenance_summary(@by_source)}
+          </p>
+          <div class="mt-4 flex justify-between border-t border-base-300 pt-3 text-sm font-bold">
+            <span>Total</span>
+            <span id="review-total">{format_price(@cart.subtotal)}</span>
+          </div>
+
+          <div
+            :if={@stale}
+            id="review-stale"
+            role="status"
+            class="mt-4 rounded-xl border border-peach-dark bg-peach p-3 text-[12px] text-error"
+          >
+            The cart changed while you were reviewing. Look over the lines again before approving.
+            <button
+              type="button"
+              id="refresh-review"
+              phx-click="refresh_review"
+              class="mt-2 block font-semibold underline cursor-pointer"
+            >
+              I've looked again
+            </button>
+          </div>
+
+          <div class="mt-4 flex flex-col gap-2">
+            <button
+              type="button"
+              id="confirm-checkout"
+              phx-hook="FzHoldToConfirm"
+              data-hold-ms="700"
+              disabled={@stale}
+              aria-describedby="confirm-checkout-help"
+              class={[
+                "relative w-full select-none overflow-hidden rounded-xl py-3 text-sm font-bold text-primary-content",
+                if(@stale,
+                  do: "bg-base-300 text-muted cursor-not-allowed",
+                  else: "bg-primary cursor-pointer hover:brightness-95"
+                )
+              ]}
+            >
+              <span
+                class="absolute inset-y-0 left-0 w-0 bg-secondary/70 transition-[width] duration-75"
+                data-hold-fill
+                aria-hidden="true"
+              />
+              <span class="relative">Press and hold to place order</span>
+            </button>
+            <button
+              type="button"
+              id="cancel-checkout"
+              phx-click="cancel_checkout"
+              class="w-full rounded-xl border border-base-300 py-3 text-sm font-semibold cursor-pointer hover:bg-base-200"
+            >
+              Back to cart
+            </button>
+          </div>
+          <p id="confirm-checkout-help" class="mt-2 text-center text-[11px] text-faint">
+            Holding the button is your approval; an agent cannot do it for you. Demo only — no payment is processed.
+          </p>
+        </aside>
+      </div>
+    </section>
     """
+  end
+
+  defp member_budget_line(%{subtotal: subtotal, budget: budget, over_by: over_by}) do
+    usd(subtotal) <>
+      if(budget, do: " / " <> usd(budget), else: "") <>
+      if(over_by > 0, do: " over", else: "")
+  end
+
+  defp usd(amount) when is_float(amount), do: "$" <> :erlang.float_to_binary(amount, decimals: 2)
+
+  defp cart_by_source(items) do
+    %{
+      human: Enum.count(items, &(&1.source == :human)),
+      agent: Enum.count(items, &(&1.source == :agent)),
+      proposal: Enum.count(items, &(&1.source == :proposal)),
+      substituted: Enum.count(items, &(&1.source == :proposal and &1.proposed_variant_id))
+    }
   end
 
   attr :confirmation, :map, required: true

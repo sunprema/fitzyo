@@ -20,6 +20,7 @@ defmodule FitzyoWeb.Router do
 
     live "/", StoreLive, :index
     live "/products/:id", StoreLive, :show
+    live "/checkout", StoreLive, :review
   end
 
   # Other scopes may use custom stacks.

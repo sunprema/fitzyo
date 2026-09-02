@@ -191,6 +191,64 @@ defmodule FitzyoWeb.StoreLiveTest do
   end
 
   describe "cart" do
+    test "the review page revokes approval when the cart changes under it", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/products/#{ctx.shirt.id}")
+      view |> element("#add-to-cart") |> render_click()
+
+      view |> element("#checkout") |> render_click()
+      assert_patch(view, ~p"/checkout")
+      assert_push_event(view, "fz:checkout_nonce", %{nonce: nonce})
+      refute has_element?(view, "#review-stale")
+      refute has_element?(view, "#cart-drawer")
+
+      # the human edits the cart from the header while reviewing
+      view |> element("#cart-button") |> render_click()
+      view |> element("#cart-items li [aria-label='Increase quantity']") |> render_click()
+      view |> element("#cart-button") |> render_click()
+
+      assert has_element?(view, "#review-stale", "cart changed")
+      assert has_element?(view, "#confirm-checkout[disabled]")
+
+      assert has_element?(
+               view,
+               "#review-lines li[data-variant-id='#{ctx.shirt.id}_blue_l'][data-quantity='2']"
+             )
+
+      assert has_element?(view, "#review-total", "$90.00")
+
+      # the old nonce no longer approves anything
+      render_hook(view, "confirm_checkout", %{
+        "nonce" => nonce,
+        "held_ms" => 900,
+        "trusted" => true
+      })
+
+      refute has_element?(view, "#order-confirmation")
+
+      # re-reading the page mints a fresh nonce that does
+      view |> element("#refresh-review") |> render_click()
+      assert_push_event(view, "fz:checkout_nonce", %{nonce: nonce2})
+      refute nonce2 == nonce
+      refute has_element?(view, "#review-stale")
+      assert has_element?(view, "#agent-activity li[data-kind='human']", "Re-read the order")
+
+      render_hook(view, "confirm_checkout", %{
+        "nonce" => nonce2,
+        "held_ms" => 900,
+        "trusted" => true
+      })
+
+      assert has_element?(view, "#order-confirmation", "Order confirmed")
+      assert_patch(view, ~p"/")
+    end
+
+    test "the review page with an empty cart has nothing to approve", ctx do
+      {:ok, view, _html} = live(ctx.conn, ~p"/checkout")
+      assert has_element?(view, "#review-empty", "Nothing to review")
+      refute has_element?(view, "#confirm-checkout")
+      refute_push_event(view, "fz:checkout_nonce", %{})
+    end
+
     test "adding, adjusting, removing and checking out", ctx do
       {:ok, view, _html} = live(ctx.conn, ~p"/products/#{ctx.shirt.id}")
 
@@ -214,18 +272,31 @@ defmodule FitzyoWeb.StoreLiveTest do
       view |> element("#cart-items li [aria-label='Decrease quantity']") |> render_click()
       assert has_element?(view, "#cart-count", "1")
 
-      # checkout is a review step plus a press-and-hold approval gesture
+      # checkout is a review page plus a press-and-hold approval gesture
       view |> element("#checkout") |> render_click()
-      assert has_element?(view, "#checkout-review li[data-variant-id='#{ctx.shirt.id}_blue_l']")
+      assert_patch(view, ~p"/checkout")
+
+      assert has_element?(
+               view,
+               "#checkout-review #review-lines li[data-variant-id='#{ctx.shirt.id}_blue_l'][data-quantity='1']",
+               "Blue / L"
+             )
+
+      assert has_element?(view, "#review-total", "$45.00")
+      assert has_element?(view, "#review-provenance", "1 yours")
+      refute has_element?(view, "#filter-rail")
       assert_push_event(view, "fz:checkout_nonce", %{nonce: nonce})
       refute has_element?(view, "#order-confirmation")
       assert has_element?(view, "#agent-activity li[data-kind='human']", "Opened order review")
 
       view |> element("#cancel-checkout") |> render_click()
+      assert_patch(view, ~p"/")
       refute has_element?(view, "#checkout-review")
+      assert has_element?(view, "#cart-drawer")
       assert has_element?(view, "#cart-count", "1")
 
       view |> element("#checkout") |> render_click()
+      assert_patch(view, ~p"/checkout")
       assert_push_event(view, "fz:checkout_nonce", %{nonce: nonce2})
       refute nonce == nonce2
 
