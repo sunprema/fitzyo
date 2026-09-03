@@ -12,6 +12,7 @@ defmodule Fitzyo.Application do
       Fitzyo.Repo,
       {DNSCluster, query: Application.get_env(:fitzyo, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Fitzyo.PubSub},
+      FitzyoWeb.StoreLive.SessionStore,
       # Start a worker by calling: Fitzyo.Worker.start_link(arg)
       # {Fitzyo.Worker, arg},
       # Start to serve requests, typically the last entry

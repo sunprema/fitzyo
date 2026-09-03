@@ -158,6 +158,24 @@ defmodule FitzyoWeb.StoreLive.State do
   end
 
   @doc """
+  Rehydrates what the agent had built up before a remount: registered
+  members, the lookbook, the plan, and capability grants (re-armed or
+  dropped by `Capabilities.restore/2`). Nothing stored means a normal
+  fresh session.
+  """
+  def restore_session(socket, snapshot) when map_size(snapshot) == 0, do: socket
+
+  def restore_session(socket, snapshot) do
+    socket
+    |> assign(
+      members: snapshot[:members] || [],
+      lookbook: snapshot[:lookbook],
+      plan: snapshot[:plan]
+    )
+    |> FitzyoWeb.StoreLive.Capabilities.restore(snapshot[:capabilities])
+  end
+
+  @doc """
   Refreshes the results stream from the current filters and counts, per
   active facet, how many more products would show if only that facet were
   dropped (`excluded_by`).

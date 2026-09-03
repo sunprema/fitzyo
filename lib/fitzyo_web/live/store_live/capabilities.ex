@@ -132,6 +132,44 @@ defmodule FitzyoWeb.StoreLive.Capabilities do
   defp default_grant(now),
     do: %{granted_at: now, by: :default, max_spend: nil, expires_at: nil, timer: nil}
 
+  @doc """
+  Puts stored grants back after a remount. A grant with an expiry still in
+  the future gets a fresh timer for the remaining time; one already past is
+  dropped, as `expire/3` would have done. Tiers missing from the snapshot
+  keep their defaults.
+  """
+  def restore(socket, nil), do: socket
+
+  def restore(socket, grants) when is_map(grants) do
+    now = DateTime.utc_now()
+
+    restored =
+      Map.new(socket.assigns.capabilities, fn {tier, default} ->
+        case Map.fetch(grants, tier) do
+          {:ok, nil} -> {tier, nil}
+          {:ok, %{} = grant} -> {tier, rearm(tier, grant, now)}
+          :error -> {tier, default}
+        end
+      end)
+
+    assign(socket, capabilities: restored)
+  end
+
+  defp rearm(_tier, %{expires_at: nil} = grant, _now), do: Map.put(grant, :timer, nil)
+
+  defp rearm(tier, %{expires_at: %DateTime{} = expires_at} = grant, now) do
+    case DateTime.diff(expires_at, now, :millisecond) do
+      remaining when remaining > 0 ->
+        timer =
+          Process.send_after(self(), {:fz_capability_expired, tier, grant.granted_at}, remaining)
+
+        Map.put(grant, :timer, timer)
+
+      _expired ->
+        nil
+    end
+  end
+
   @doc "Whether `tier` is currently granted (and not expired)."
   def granted?(socket, tier), do: not is_nil(socket.assigns.capabilities[tier])
 

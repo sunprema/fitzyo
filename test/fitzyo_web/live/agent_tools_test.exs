@@ -96,6 +96,132 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
     Jason.decode!(json)
   end
 
+  describe "session state across a remount" do
+    # A reload, a dropped socket, or a full navigation starts a new LiveView
+    # process. The cart is in the database, so it always survives; the
+    # agent's session state must come back with it or the two disagree.
+    defp mount_session(conn, cart_id) do
+      conn = Plug.Test.init_test_session(conn, %{"cart_id" => cart_id})
+      {:ok, view, _html} = live(conn, ~p"/")
+      view
+    end
+
+    defp build_session(view, ctx) do
+      ok!(view, "register_party_member", %{
+        "label" => "Dad",
+        "gender" => "men",
+        "sizes" => %{"tops" => "XL", "bottoms" => "32"},
+        "budget" => 100
+      })
+
+      id = System.unique_integer([:positive])
+
+      render_hook(view, "webmcp:call", %{
+        "id" => id,
+        "tool" => "request_capability",
+        "input" => %{
+          "capability" => "cart",
+          "scope" => %{"max_spend" => 250, "expires_ms" => 600_000}
+        }
+      })
+
+      view |> form("#capability-request-form", %{"max_spend" => "250"}) |> render_submit()
+      assert_push_event(view, "webmcp:result", %{id: ^id, result: %{granted: true}})
+
+      ok!(view, "add_to_cart", %{"variant_id" => "#{ctx.columbia.id}_blue_xl", "label" => "Dad"})
+
+      ok!(view, "present_plan", %{
+        "title" => "Hawaii — 7 day wardrobe",
+        "groups" => [
+          %{"label" => "Dad", "items" => [%{"text" => "1 hiking short", "status" => "need"}]}
+        ]
+      })
+
+      ok!(view, "present_lookbook", %{
+        "title" => "Hawaii — 1 day lookbook",
+        "days" => [
+          %{
+            "label" => "Day 1: Beach",
+            "slots" => [
+              %{
+                "label" => "Dad",
+                "product_id" => ctx.short.id,
+                "variant_id" => "#{ctx.short.id}_black_32"
+              }
+            ]
+          }
+        ]
+      })
+    end
+
+    test "members, grants, lookbook, and plan come back and budgets stay measured", ctx do
+      cart_id = Ash.UUID.generate()
+      view = mount_session(ctx.conn, cart_id)
+      build_session(view, ctx)
+
+      # the same browser session mounts a fresh LiveView process
+      view2 = mount_session(ctx.conn, cart_id)
+      state = ok!(view2, "get_store_state").state
+
+      assert [%{label: "Dad"}] = state.members
+      assert state.capabilities["cart"].max_spend == 250.0
+      assert state.plan.title == "Hawaii — 7 day wardrobe"
+      assert state.lookbook.title == "Hawaii — 1 day lookbook"
+      assert has_element?(view2, "#lookbook")
+      assert has_element?(view2, "#capability-cart[data-granted='true']")
+
+      cart = ok!(view2, "get_cart").cart
+      assert cart.by_label["Dad"] == %{subtotal: 45.0, budget: 100.0, over_by: 0.0}
+
+      # the restored grant is still enforced
+      assert error!(view2, "add_to_cart", %{
+               "variant_id" => "#{ctx.columbia.id}_blue_xl",
+               "quantity" => 6,
+               "label" => "Dad"
+             })["code"] == "CAPABILITY_SCOPE_EXCEEDED"
+    end
+
+    test "with nothing stored, a remount leaves no partial state: unknown budgets read as null",
+         ctx do
+      cart_id = Ash.UUID.generate()
+      view = mount_session(ctx.conn, cart_id)
+      build_session(view, ctx)
+
+      FitzyoWeb.StoreLive.SessionStore.delete(cart_id)
+      view2 = mount_session(ctx.conn, cart_id)
+      state = ok!(view2, "get_store_state").state
+
+      assert state.members == []
+      assert is_nil(state.capabilities["cart"])
+      assert is_nil(state.lookbook)
+      assert is_nil(state.plan)
+
+      cart = ok!(view2, "get_cart").cart
+      assert cart.item_count == 1
+      assert cart.by_label["Dad"] == %{subtotal: 45.0, budget: nil, over_by: nil}
+    end
+
+    test "a grant whose expiry passed before the remount is not restored", ctx do
+      cart_id = Ash.UUID.generate()
+      view = mount_session(ctx.conn, cart_id)
+      render_click(view, "capability_allow", %{"capability" => "cart", "max_spend" => ""})
+
+      snapshot = FitzyoWeb.StoreLive.SessionStore.get(cart_id)
+
+      stale =
+        put_in(
+          snapshot,
+          [:capabilities, "cart", :expires_at],
+          DateTime.add(DateTime.utc_now(), -1, :second)
+        )
+
+      FitzyoWeb.StoreLive.SessionStore.put(cart_id, stale)
+
+      view2 = mount_session(ctx.conn, cart_id)
+      assert is_nil(ok!(view2, "get_store_state").state.capabilities["cart"])
+    end
+  end
+
   describe "tool surface" do
     test "registers every semantic tool with schemas and annotations", %{conn: conn} do
       {:ok, view, _html} = live_granted(conn, ~p"/")
@@ -313,7 +439,8 @@ defmodule FitzyoWeb.StoreLive.AgentToolsTest do
              )
     end
 
-    test "a facet set by both sides shows in both sections and each owner's constraints drop as one", ctx do
+    test "a facet set by both sides shows in both sections and each owner's constraints drop as one",
+         ctx do
       {:ok, view, _html} = live(ctx.conn, ~p"/")
 
       view |> element("#filter-category-#{ctx.shirts.id}") |> render_click()

@@ -37,6 +37,7 @@ defmodule FitzyoWeb.StoreLive do
     Members,
     Proposals,
     Questions,
+    SessionStore,
     State
   }
 
@@ -45,7 +46,8 @@ defmodule FitzyoWeb.StoreLive do
      socket
      |> attach_hook(:fz_capabilities, :handle_event, &Capabilities.intercept/3)
      |> attach_hook(:fz_ask_human, :handle_event, &Questions.intercept/3)
-     |> attach_hook(:fz_propose_cart, :handle_event, &Proposals.intercept/3)}
+     |> attach_hook(:fz_propose_cart, :handle_event, &Proposals.intercept/3)
+     |> attach_hook(:fz_session_store, :after_render, &SessionStore.persist/1)}
   end
 
   # ---------------------------------------------------------------- lifecycle
@@ -58,6 +60,7 @@ defmodule FitzyoWeb.StoreLive do
      socket
      |> State.initial(cart_id)
      |> Capabilities.initial()
+     |> State.restore_session(SessionStore.get(cart_id))
      |> assign(
        size_guide_open: false,
        cart_open: false,
@@ -2519,7 +2522,7 @@ defmodule FitzyoWeb.StoreLive do
                 :if={spent = @by_label[member.label]}
                 class={[
                   "text-[11px] tabular-nums",
-                  if(spent.over_by > 0, do: "font-semibold text-error", else: "text-muted")
+                  if(over_budget?(spent), do: "font-semibold text-error", else: "text-muted")
                 ]}
                 data-subtotal={spent.subtotal}
               >
@@ -2801,15 +2804,15 @@ defmodule FitzyoWeb.StoreLive do
                 id={"cart-group-total-#{dom_slug(label)}"}
                 class={[
                   "normal-case tracking-normal tabular-nums",
-                  if(@by_label[label].over_by > 0, do: "text-error", else: "text-muted")
+                  if(over_budget?(@by_label[label]), do: "text-error", else: "text-muted")
                 ]}
-                data-over-by={@by_label[label].over_by}
+                data-over-by={@by_label[label].over_by || 0}
               >
                 ${:erlang.float_to_binary(@by_label[label].subtotal, decimals: 2)}{if @by_label[label].budget,
                   do: " / $" <> :erlang.float_to_binary(@by_label[label].budget, decimals: 2)}{if @by_label[
                                                                                                     label
-                                                                                                  ].over_by >
-                                                                                                    0,
+                                                                                                  ]
+                                                                                                  |> over_budget?(),
                                                                                                   do:
                                                                                                     " over"}
               </span>
@@ -3002,7 +3005,7 @@ defmodule FitzyoWeb.StoreLive do
                 :if={label && @by_label[label]}
                 class={[
                   "normal-case tracking-normal tabular-nums",
-                  if(@by_label[label].over_by > 0, do: "text-error", else: "text-muted")
+                  if(over_budget?(@by_label[label]), do: "text-error", else: "text-muted")
                 ]}
               >
                 {member_budget_line(@by_label[label])}
@@ -3026,7 +3029,7 @@ defmodule FitzyoWeb.StoreLive do
             </div>
             <div :for={{label, totals} <- Enum.sort(@by_label)} class="flex justify-between">
               <dt class="text-muted">{label}</dt>
-              <dd class={["tabular-nums", totals.over_by > 0 && "text-error"]}>
+              <dd class={["tabular-nums", over_budget?(totals) && "text-error"]}>
                 {member_budget_line(totals)}
               </dd>
             </div>
@@ -3097,11 +3100,14 @@ defmodule FitzyoWeb.StoreLive do
     """
   end
 
-  defp member_budget_line(%{subtotal: subtotal, budget: budget, over_by: over_by}) do
+  defp member_budget_line(%{subtotal: subtotal, budget: budget} = totals) do
     usd(subtotal) <>
       if(budget, do: " / " <> usd(budget), else: "") <>
-      if(over_by > 0, do: " over", else: "")
+      if(over_budget?(totals), do: " over", else: "")
   end
+
+  defp over_budget?(%{over_by: %Decimal{} = over_by}), do: Decimal.positive?(over_by)
+  defp over_budget?(%{over_by: over_by}), do: is_number(over_by) and over_by > 0
 
   defp usd(amount) when is_float(amount), do: "$" <> :erlang.float_to_binary(amount, decimals: 2)
 

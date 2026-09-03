@@ -128,7 +128,11 @@ defmodule FitzyoWeb.StoreLive.Presenter do
     }
   end
 
-  @doc "Per-label subtotal, budget (from a registered member), and overage."
+  @doc """
+  Per-label subtotal, budget (from a registered member), and overage. With
+  no registered budget both `budget` and `over_by` are nil: "not measured",
+  never a confident zero.
+  """
   def by_label(items, members) do
     items
     |> Enum.reject(&is_nil(&1.label))
@@ -138,12 +142,18 @@ defmodule FitzyoWeb.StoreLive.Presenter do
       budget = FitzyoWeb.StoreLive.Members.budget(members, label)
 
       over =
-        if budget && Decimal.compare(subtotal, budget) == :gt,
-          do: Decimal.sub(subtotal, budget),
-          else: Decimal.new(0)
+        cond do
+          is_nil(budget) -> nil
+          Decimal.compare(subtotal, budget) == :gt -> Decimal.sub(subtotal, budget)
+          true -> Decimal.new(0)
+        end
 
       {label,
-       %{subtotal: number(subtotal), budget: budget && number(budget), over_by: number(over)}}
+       %{
+         subtotal: number(subtotal),
+         budget: budget && number(budget),
+         over_by: over && number(over)
+       }}
     end)
   end
 
