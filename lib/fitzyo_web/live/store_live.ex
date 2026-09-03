@@ -730,7 +730,7 @@ defmodule FitzyoWeb.StoreLive do
       id="store-header"
       class="sticky top-0 z-20 flex h-[68px] shrink-0 items-center gap-4 border-b border-base-300 bg-base-100 px-4 md:gap-6 md:px-8"
     >
-      <.link navigate={~p"/"} class="flex shrink-0 items-center gap-2" aria-label="FitzYo home">
+      <.link patch={~p"/"} class="flex shrink-0 items-center gap-2" aria-label="FitzYo home">
         <span class="flex size-8 items-center justify-center rounded-[10px] bg-primary font-display text-base font-bold text-primary-content">
           Fz
         </span>
