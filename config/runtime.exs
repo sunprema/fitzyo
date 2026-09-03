@@ -74,8 +74,14 @@ if config_env() == :prod do
 
   config :fitzyo, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
 
+  # LiveView sockets are accepted from the custom domain, its www alias,
+  # and the fly.dev hostname, so every address the app answers on works.
+  check_origin =
+    Enum.uniq(["//#{host}", "//www.#{host}", "//fitzyo.fly.dev"])
+
   config :fitzyo, FitzyoWeb.Endpoint,
     url: [host: host, port: 443, scheme: "https"],
+    check_origin: check_origin,
     http: [
       # Enable IPv6 and bind on all interfaces.
       # Set it to  {0, 0, 0, 0, 0, 0, 0, 1} for local network only access.
